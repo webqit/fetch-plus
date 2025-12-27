@@ -1,5 +1,5 @@
 import { _isObject, _isTypeObject } from '@webqit/util/js/index.js';
-import { BroadcastChannelPlus, WebSocketPlus, MessagePortPlus, Observer } from '@webqit/port-plus';
+import { BroadcastChannelPlus, WebSocketPort, MessagePortPlus, Observer } from '@webqit/port-plus';
 import { isTypeStream, _meta, _wq } from './core.js';
 import { ResponsePlus } from './ResponsePlus.js';
 import { HeadersPlus } from './HeadersPlus.js';
@@ -47,8 +47,8 @@ export class LiveResponse extends EventTarget {
             }
 
             const backgroundPort = proto === 'br'
-                ? new BroadcastChannelPlus(portID)
-                : new WebSocketPlus(portID);
+                ? new BroadcastChannelPlus(portID, { autoStart: false, postAwaitsOpen: true, clientServerMode: 'client' })
+                : new WebSocketPort(portID, { autoStart: false, naturalOpen: false, postAwaitsOpen: true });
 
             responseMeta.set('background_port', backgroundPort);
         }
