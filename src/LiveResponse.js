@@ -57,6 +57,9 @@ export class LiveResponse extends EventTarget {
     }
 
     static from(data, ...args) {
+        if (this.test(data) === 'LiveResponse') {
+            return data.clone(...args);
+        }
         return new this(data, ...args);
     }
 
