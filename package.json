@@ -1,0 +1,49 @@
+{
+  "name": "@webqit/fetch-plus",
+  "publishConfig": {
+    "access": "public"
+  },
+  "title": "Fetch+",
+  "description": "Upgraded fetch and the LiveResponse API",
+  "keywords": [
+    "fetch",
+    "LiveResponse"
+  ],
+  "homepage": "https://fetch-plus.netlify.app/",
+  "icon": "https://webqit.io/icon.svg",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webqit/fetch-plus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webqit/fetch-plus/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "mocha --extension .test.js --recursive --timeout 5000 --exit",
+    "build": "esbuild main=src/index.browser.js --bundle --minify --sourcemap --outdir=dist",
+    "preversion": "npm run test && npm run build && git add -A dist",
+    "postversion": "git push && git push --tags",
+    "version:next": "npm version prerelease --preid=next"
+  },
+  "dependencies": {
+    "@webqit/port-plus": "^0.1.0",
+    "@webqit/util": "^0.8.16"
+  },
+  "devDependencies": {
+    "chai": "^4.3.4",
+    "chai-as-promised": "^7.1.1",
+    "esbuild": "^0.20.2",
+    "mocha": "^10.3.0"
+  },
+  "author": "Oxford Harrison <oxharris.dev@gmail.com>",
+  "maintainers": [
+    "Oxford Harrison <oxharris.dev@gmail.com>"
+  ],
+  "contributors": []
+}
