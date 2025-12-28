@@ -3,7 +3,7 @@ import { _wq as $wq } from '@webqit/util/js/index.js';
 import { FormDataPlus } from './FormDataPlus.js';
 
 export const _wq = (target, ...args) => $wq(target, 'fetch+', ...args);
-export const _meta = (target) => $wq(target, 'fetch+', 'meta');
+export const _meta = (target, ...args) => $wq(target, 'fetch+', 'meta', ...args);
 
 export function messageParserMixin(superClass) {
     return class extends superClass {

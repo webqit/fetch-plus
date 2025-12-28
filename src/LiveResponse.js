@@ -211,7 +211,7 @@ export class LiveResponse extends EventTarget {
             this.#body = $body;
 
             // Must come after all property assignments above because it fires events
-            Observer.defineProperty(this, 'body', { get: () => this.#body, enumerable: true, configurable: true });
+            Observer.defineProperty(this, 'body', { get: () => this.#body, enumerable: false, configurable: true });
 
             const readyStateInternals = getReadyStateInternals.call(this);
             readyStateInternals.live.state = true;
@@ -477,7 +477,7 @@ export function getReadyStateInternals() {
     const portPlusMeta = _meta(this);
     if (!portPlusMeta.has('readystate_registry')) {
         const $ref = (o) => {
-            o.promise = new Promise((res, rej) => (o.resolve = res, o.reject = rej));
+            o.promise = new Promise((res, rej) => (o.resolve = () => res(this), o.reject = rej));
             return o;
         };
         portPlusMeta.set('readystate_registry', {

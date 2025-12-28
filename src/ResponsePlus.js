@@ -9,8 +9,10 @@ export class ResponsePlus extends messageParserMixin(Response) {
     }
 
     static upgradeInPlace(response) {
+        if (response instanceof ResponsePlus) return response;
         Object.setPrototypeOf(response, ResponsePlus.prototype);
         HeadersPlus.upgradeInPlace(response.headers);
+        return response;
     }
 
     static from(body, { memoize = false, ...init } = {}) {

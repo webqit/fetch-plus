@@ -9,8 +9,10 @@ export class RequestPlus extends messageParserMixin(Request) {
     }
 
     static upgradeInPlace(request) {
+        if (request instanceof RequestPlus) return request;
         Object.setPrototypeOf(request, RequestPlus.prototype);
         HeadersPlus.upgradeInPlace(request.headers);
+        return request;
     }
 
     static from(url, { memoize = false, ...init } = {}) {

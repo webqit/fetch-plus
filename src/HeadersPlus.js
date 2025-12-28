@@ -5,7 +5,8 @@ import { _after } from '@webqit/util/str/index.js';
 export class HeadersPlus extends upgradeMixin(Headers) {
 
     static upgradeInPlace(headers) {
-        Object.setPrototypeOf(headers, HeadersPlus.prototype);
+        if (headers instanceof HeadersPlus) return headers;
+        return Object.setPrototypeOf(headers, HeadersPlus.prototype);
     }
 
     set(name, value) {

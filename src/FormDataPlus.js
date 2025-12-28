@@ -6,7 +6,8 @@ import { dataType, _meta, _wq } from './core.js';
 export class FormDataPlus extends FormData {
 
     static upgradeInPlace(formData) {
-        Object.setPrototypeOf(formData, FormDataPlus.prototype);
+        if (formData instanceof FormDataPlus) return formData;
+        return Object.setPrototypeOf(formData, FormDataPlus.prototype);
     }
 
     static json(data = {}, { recursive = true, getIsJsonfiable = false } = {}) {
