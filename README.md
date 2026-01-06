@@ -2049,4 +2049,3 @@ MIT © Oxford Harrison
 [bundle-src]: https://img.shields.io/bundlephobia/minzip/@webqit/fetch-plus?style=flat&colorA=18181B&colorB=F0DB4F
 [bundle-href]: https://bundlephobia.com/result?p=@webqit/fetch-plus
 [license-src]: https://img.shields.io/github/license/webqit/fetch-plus.svg?style=flat&colorA=18181B&colorB=F0DB4F
-```
