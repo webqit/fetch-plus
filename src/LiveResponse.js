@@ -1,13 +1,13 @@
 import { _isObject, _isTypeObject } from '@webqit/util/js/index.js';
-import { BroadcastChannelPlus, WebSocketPort, MessagePortPlus, Observer } from '@webqit/port-plus';
-import { isTypeStream, _meta, _wq } from './core.js';
+import { Observer, ListenerRegistry, Descriptor } from '@webqit/observer';
+import { BroadcastChannelPlus, WebSocketPort, MessagePortPlus } from '@webqit/port-plus';
+import { isTypeStream, _meta, _wq } from './messageParserMixin.js';
 import { ResponsePlus } from './ResponsePlus.js';
-import { HeadersPlus } from './HeadersPlus.js';
 
 export class LiveResponse extends EventTarget {
 
     static get xHeaderName() {
-        return 'X-Background-Messaging-Port';
+        return 'X-Message-Port';
     }
 
     static test(unknown) {
@@ -27,33 +27,41 @@ export class LiveResponse extends EventTarget {
         return 'Default';
     }
 
-    static hasBackgroundPort(respone) {
+    static hasPort(respone) {
         return !!respone.headers?.get?.(this.xHeaderName)?.trim();
     }
 
-    static getBackgroundPort(respone) {
+    static getPort(respone, autoStart = false) {
         if (!/Response/.test(this.test(respone))) {
             return;
         }
         const responseMeta = _meta(respone);
 
-        if (!responseMeta.has('background_port')) {
+        if (!responseMeta.has('port')) {
             const value = respone.headers.get(this.xHeaderName)?.trim();
             if (!value) return;
 
-            const [proto, portID] = value.split(':');
-            if (!['ws', 'br'].includes(proto)) {
-                throw new Error(`Unknown background messaging protocol: ${value}`);
+            const [, scheme, portID] = /^(socket|channel):\/\/(.*)$/.exec(value) || [];
+            if (!scheme || !portID) {
+                throw new Error(`Unknown port messaging protocol: ${value}`);
             }
 
-            const backgroundPort = proto === 'br'
-                ? new BroadcastChannelPlus(portID, { autoStart: false, postAwaitsOpen: true, clientServerMode: 'client' })
-                : new WebSocketPort(portID, { autoStart: false, naturalOpen: false, postAwaitsOpen: true });
+            const port = scheme === 'channel'
+                ? new BroadcastChannelPlus(portID, { autoStart, postAwaitsOpen: true, clientServerMode: 'client' })
+                : new WebSocketPort(portID, { autoStart, naturalOpen: false, postAwaitsOpen: true });
 
-            responseMeta.set('background_port', backgroundPort);
+            responseMeta.set('port', port);
         }
 
-        return responseMeta.get('background_port');
+        return responseMeta.get('port');
+    }
+
+    static attachPort(respone, port) {
+        if (!(port instanceof MessagePortPlus)) {
+            throw new Error('Client must be a MessagePortPlus interface');
+        }
+        const responseMeta = _meta(respone);
+        responseMeta.set('port', port);
     }
 
     static from(data, ...args) {
@@ -67,9 +75,18 @@ export class LiveResponse extends EventTarget {
 
     [Symbol.toStringTag] = 'LiveResponse';
 
+    #listenersRegistry;
+
     constructor(body, ...args) {
         super();
-        this.#replaceWith(body, ...args);
+        this.#listenersRegistry = ListenerRegistry.getInstance(this, true);
+
+        const readyStateInternals = getReadyStateInternals.call(this);
+        const frame = readyStateInternals.now;
+
+        this.#replaceWith(frame, body, ...args).catch((e) => {
+            frame.reject(e);
+        });
     }
 
     /* Level 1 props */
@@ -77,9 +94,12 @@ export class LiveResponse extends EventTarget {
     #body = null;
     get body() { return this.#body; }
 
-    get bodyUsed() { return false; }
+    #concurrent = false;
+    get concurrent() { return this.#concurrent; }
 
-    #headers = new HeadersPlus;
+    get bodyUsed() { return true; }
+
+    #headers = new Headers;
     get headers() { return this.#headers; }
 
     #status = 200;
@@ -99,28 +119,21 @@ export class LiveResponse extends EventTarget {
     #url = null;
     get url() { return this.#url; }
 
-    get ok() { return this.#status >= 200 && this.#status < 299; }
+    get ok() { return !!(this.#status >= 200 && this.#status < 299); }
 
-    async arrayBuffer() { throw new Error(`LiveResponse does not support the arrayBuffer() method.`); }
-
-    async formData() { throw new Error(`LiveResponse does not support the formData() method.`); }
-
-    async json() { throw new Error(`LiveResponse does not support the json() method.`); }
-
-    async text() { throw new Error(`LiveResponse does not support the text() method.`); }
-
-    async blob() { throw new Error(`LiveResponse does not support the blob() method.`); }
-
-    async bytes() { throw new Error(`LiveResponse does not support the bytes() method.`); }
+    async now() {
+        const readyStateInternals = getReadyStateInternals.call(this);
+        return readyStateInternals.now.promise;
+    }
 
     /* Level 3 props */
 
-    get background() { return this.constructor.getBackgroundPort(this); }
+    get port() { return this.constructor.getPort(this, true); }
 
     // Lifecycle
 
     #abortController = new AbortController;
-    get signal() { return this.#abortController.signal; }
+    #concurrencyAbortController = new AbortController;
 
     get readyState() {
         const readyStateInternals = getReadyStateInternals.call(this);
@@ -129,16 +142,20 @@ export class LiveResponse extends EventTarget {
     }
 
     readyStateChange(query) {
-        if (!['live', 'done'].includes(query)) {
+        if (!['live', 'now', 'done'].includes(query)) {
             throw new Error(`Invalid readyState query "${query}"`);
         }
         const readyStateInternals = getReadyStateInternals.call(this);
         return readyStateInternals[query].promise;
     }
 
-    disconnect() {
+    disconnect(dispose = false) {
         this.#abortController.abort();
         this.#abortController = new AbortController;
+        if (dispose) {
+            this.#concurrencyAbortController.abort();
+            this.#concurrencyAbortController = new AbortController;
+        }
     }
 
     #currentFramePromise;
@@ -161,6 +178,7 @@ export class LiveResponse extends EventTarget {
                 readyStateInternals.done.reject(e);
             }
         });
+        return promise;
     }
 
     async replaceWith(body, ...args) {
@@ -168,65 +186,101 @@ export class LiveResponse extends EventTarget {
             throw new Error('Response already done.');
         }
         this.disconnect(); // Disconnect from existing source if any
-        await this.#replaceWith(body, ...args);
+        await this.#replaceWith(null, body, ...args);
     }
 
-    async #replaceWith(body, ...args) {
+    async #replaceWith(__frame, body, ...args) {
+        const readyStateInternals = getReadyStateInternals.call(this);
+        const frame = __frame || readyStateInternals.now.refresh();
+
+        // ----------- Promise input
+
         if (body instanceof Promise) {
-            this.#extendLifecycle(body);
-            return await new Promise((resolve, reject) => {
-                let aborted = false;
+            return this.#extendLifecycle(new Promise((resolve, reject) => {
                 this.#abortController.signal.addEventListener('abort', () => {
-                    aborted = true
+                    frame.aborted = true;
                     resolve();
                 });
+
                 body.then(async (resolveData) => {
-                    if (aborted) return;
-                    await this.#replaceWith(resolveData, ...args);
+                    await this.#replaceWith(frame, resolveData, ...args);
                     resolve();
-                });
-                body.catch((e) => reject(e));
-            });
+                }).catch((e) => reject(e));
+            }));
         }
 
         // ----------- Formatters
 
-        const directReplaceWith = (responseLike) => {
-            const $body = responseLike.body;
+        const directReplaceWith = (__frame, responseFrame) => {
+            responseFrame = Object.freeze({
+                ...responseFrame,
+                ok: !!(responseFrame.status >= 200 && responseFrame.status < 299),
+                bodyUsed: true,
+            });
 
-            this.#status = responseLike.status;
-            this.#statusText = responseLike.statusText;
+            if (__frame?.aborted) {
+                __frame.resolve(responseFrame);
+                return;
+            }
+
+            const frame = __frame || readyStateInternals.now.refresh();
+
+            const $body = responseFrame.body;
+
+            this.#status = responseFrame.status;
+            this.#statusText = responseFrame.statusText;
 
             for (const [name] of [/*IMPORTANT*/...this.#headers.entries()]) { // for some reason, some entries not produced when not spread
                 this.#headers.delete(name);
             }
-            for (const [name, value] of responseLike.headers.entries()) {
+            for (const [name, value] of responseFrame.headers.entries()) {
                 this.#headers.append(name, value);
             }
 
-            this.#type = responseLike.type;
-            this.#redirected = responseLike.redirected;
-            this.#url = responseLike.url;
+            this.#type = responseFrame.type;
+            this.#redirected = responseFrame.redirected;
+            this.#url = responseFrame.url;
 
+            const bodyOld = this.#body;
             this.#body = $body;
+            this.#concurrent = !!responseFrame.concurrent;
+
+            if (!this.#concurrent) {
+                this.#concurrencyAbortController.abort();
+                this.#concurrencyAbortController = new AbortController;
+            }
+
+            const descriptor = new Descriptor(this, {
+                type: 'set',
+                key: 'body',
+                value: $body,
+                oldValue: bodyOld,
+                isUpdate: true,
+                related: [],
+                operation: 'set',
+                detail: null,
+            });
+
+            // Must come first so that observers below here see this state
+
+            readyStateInternals.live.state = true;
+            readyStateInternals.live.resolve(this);
+
+            // May trigger "done" ready state
+            frame.resolve(responseFrame);
 
             // Must come after all property assignments above because it fires events
-            Observer.defineProperty(this, 'body', { get: () => this.#body, enumerable: false, configurable: true });
-
-            const readyStateInternals = getReadyStateInternals.call(this);
-            readyStateInternals.live.state = true;
-            readyStateInternals.live.resolve();
-
-            this.dispatchEvent(new Event('replace'));
+            this.#listenersRegistry.emit([descriptor]);
+            this.dispatchEvent(new ReplaceEvent(responseFrame));
         };
 
-        const wrapReplaceWith = async (body, options) => {
-            directReplaceWith({
+        const wrapReplaceWith = (frame, body, options) => {
+            directReplaceWith(frame, {
                 body,
                 status: 200,
                 statusText: '',
-                headers: new Headers,
                 ...options,
+                headers: options.headers instanceof Headers ? options.headers : new Headers(options.headers || {}),
                 type: 'basic',
                 redirected: false,
                 url: null
@@ -235,21 +289,22 @@ export class LiveResponse extends EventTarget {
 
         // ----------- "Response" handler
 
-        const execReplaceWithResponse = async (response, options) => {
+        const execReplaceWithResponse = async (frame, response, options) => {
             let body, jsonSuccess = false;
             try {
                 body = response instanceof Response
-                    ? await ResponsePlus.prototype.parse.call(response, { to: 'json' })
-                    : response.body;
+                    ? await ResponsePlus.prototype.any.call(response, { to: 'json' })
+                    : (await response.readyStateChange('live')).body;
                 jsonSuccess = true;
             } catch (e) {
-                body = response.body;
+                body = await ResponsePlus.prototype.any.call(response);
             }
-            directReplaceWith({
+            directReplaceWith(frame, {
                 body,
                 status: response.status,
                 statusText: response.statusText,
                 headers: response.headers,
+                concurrent: response.concurrent, // for response === LiveResponse
                 ...options,
                 type: response.type,
                 redirected: response.redirected,
@@ -257,54 +312,61 @@ export class LiveResponse extends EventTarget {
             });
 
             if (this.constructor.test(response) === 'LiveResponse') {
-                response.addEventListener('replace', () => {
-                    directReplaceWith(response)
-                }, { signal: this.#abortController.signal });
-                return await response.readyStateChange('done');
+                const replaceHandler = () => {
+                    wrapReplaceWith(null, response.body, response);
+                };
+                response.addEventListener('replace', replaceHandler, { signal: this.#abortController.signal });
+                await response.readyStateChange('done');
+                response.removeEventListener('replace', replaceHandler);
+                return response;
             }
 
-            if (this.hasBackgroundPort(response)) {
-                const backgroundPort = this.constructor.getBackgroundPort(response);
+            if (this.constructor.hasPort(response)) {
+                const port = this.constructor.getPort(response);
+                port.start();
+
                 // Bind to upstream mutations
-                let undoInitialProjectMutations;
                 if (jsonSuccess) {
-                    undoInitialProjectMutations = donePromise.projectMutations({
+                    port.projectMutations({
                         from: 'initial_response',
                         to: body,
-                        signal: this.#abortController.signal
+                        signal: this.#concurrencyAbortController.signal
                     });
                 }
+
                 // Bind to replacements
-                backgroundPort.addEventListener('response.replace', (e) => {
-                    undoInitialProjectMutations?.();
-                    undoInitialProjectMutations = null;
-
-                    directReplaceWith(e.data);
-                }, { signal: this.#abortController.signal });
-                // Wait until done
-                return await backgroundPort.readyStateChange('close');
+                return new Promise((resolve) => {
+                    const replaceHandler = (e) => {
+                        const { body, ...options } = e.data;
+                        wrapReplaceWith(null, body, { ...options });
+                    };
+                    port.addEventListener('response.replace', replaceHandler, { signal: this.#abortController.signal });
+                    port.addEventListener('response.done', () => {
+                        port.removeEventListener('response.replace', replaceHandler);
+                        resolve(this);
+                    }, { once: true });
+                    port.readyStateChange('close').then(resolve);
+                });
             }
-
-            return Promise.resolve();
         };
 
         // ----------- "Generator" handler
 
-        const execReplaceWithGenerator = async (gen, options) => {
+        const execReplaceWithGenerator = async (frame, gen, options) => {
             const firstFrame = await gen.next();
             const firstValue = await firstFrame.value;
 
-            await this.#replaceWith(firstValue, { done: firstFrame.done, ...options });
+            await this.#replaceWith(frame, firstValue, { done: firstFrame.done, ...options });
             // this is the first time options has a chance to be applied
 
-            let frame = firstFrame;
+            let generatorFrame = firstFrame;
             let value = firstValue;
 
-            while (!frame.done && !this.#abortController.signal.aborted) {
-                frame = await gen.next();
-                value = await frame.value;
+            while (!generatorFrame.done && !this.#abortController.signal.aborted) {
+                generatorFrame = await gen.next();
+                value = await generatorFrame.value;
                 if (!this.#abortController.signal.aborted) {
-                    await this.#replaceWith(value, { done: options.done === false ? false : frame.done });
+                    await this.#replaceWith(null, value, { concurrent: options.concurrent, done: options.done === false ? false : generatorFrame.done });
                     // top-level false need to be respected: means keep instance alive even when done
                 }
             }
@@ -312,14 +374,14 @@ export class LiveResponse extends EventTarget {
 
         // ----------- "LiveProgramHandle" handler
 
-        const execReplaceWithLiveProgramHandle = async (liveProgramHandle, options) => {
-            await this.#replaceWith(liveProgramHandle.value, options);
+        const execReplaceWithLiveProgramHandle = async (frame, liveProgramHandle, options) => {
+            await this.#replaceWith(frame, liveProgramHandle.value, options);
             // this is the first time options has a chance to be applied
 
             Observer.observe(
                 liveProgramHandle,
                 'value',
-                (e) => this.#replaceWith(e.value, { done: false }),
+                (e) => this.#replaceWith(null, e.value, { concurrent: options.concurrent, done: false }),
                 // we're never done unless explicitly aborted
                 { signal: this.#abortController.signal }
             );
@@ -329,110 +391,109 @@ export class LiveResponse extends EventTarget {
 
         // ----------- Procesing time
 
-        const options = _isObject(args[0]/* !ORDER 1 */) ? { ...args.shift() } : {};
-        const frameClosure = typeof args[0]/* !ORDER 2 */ === 'function' ? args.shift() : null;
+        const frameClosure = typeof args[0]/* !ORDER 1 */ === 'function' ? args.shift() : null;
+        const frameOptions = _isObject(args[0]/* !ORDER 2 */) ? { ...args.shift() } : {};
 
-        if ('status' in options) {
-            options.status = parseInt(options.status);
-            if (options.status < 200 || options.status > 599) {
-                throw new Error(`The status provided (${options.status}) is outside the range [200, 599].`);
+        if ('status' in frameOptions) {
+            frameOptions.status = parseInt(frameOptions.status);
+            if (frameOptions.status < 200 || frameOptions.status > 599) {
+                throw new Error(`The status provided (${frameOptions.status}) is outside the range [200, 599].`);
             }
         }
-        if ('statusText' in options) {
-            options.statusText = String(options.statusText);
+        if ('statusText' in frameOptions) {
+            frameOptions.statusText = String(frameOptions.statusText);
         }
-        if (options.headers && !(options.headers instanceof Headers)) {
-            options.headers = new Headers(options.headers);
+        if (frameOptions.headers && !(frameOptions.headers instanceof Headers)) {
+            frameOptions.headers = new Headers(frameOptions.headers);
+        }
+        if ('concurrent' in frameOptions) {
+            frameOptions.concurrent = Boolean(frameOptions.concurrent);
         }
 
         // ----------- Dispatch time
-
-        let donePromise;
 
         if (/Response/.test(this.constructor.test(body))) {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for responses.`);
             }
-            donePromise = await execReplaceWithResponse(body, options);
+            frame.donePromise = execReplaceWithResponse(frame, body, frameOptions);
         } else if (this.constructor.test(body) === 'Generator') {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for generators.`);
             }
-            donePromise = await execReplaceWithGenerator(body, options);
+            frame.donePromise = execReplaceWithGenerator(frame, body, frameOptions);
         } else if (this.constructor.test(body) === 'LiveProgramHandle') {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for live program handles.`);
             }
-            donePromise = await execReplaceWithLiveProgramHandle(body, options);
+            frame.donePromise = execReplaceWithLiveProgramHandle(frame, body, frameOptions);
         } else {
-            donePromise = wrapReplaceWith(body, options);
+            frame.donePromise = Promise.resolve(wrapReplaceWith(frame, body, frameOptions));
             if (frameClosure) {
                 const reactiveProxy = _isTypeObject(body) && !isTypeStream(body)
                     ? Observer.proxy(body, { chainable: true, membrane: body })
                     : body;
-                donePromise = Promise.resolve(frameClosure.call(this, reactiveProxy));
+                frame.donePromise = Promise.resolve(frameClosure.call(this, reactiveProxy, this.#concurrencyAbortController.signal));
             }
         }
 
         // Lifecycle time
 
-        this.#extendLifecycle(options.done === false ? new Promise(() => { }) : donePromise);
-        
+        this.#extendLifecycle(frameOptions.done === false ? new Promise(() => { }) : frame.donePromise);
+
         return await new Promise((resolve, reject) => {
-            this.#abortController.signal.addEventListener('abort', resolve);
-            donePromise.then(() => resolve());
-            donePromise.catch((e) => reject(e));
+            this.#abortController.signal.addEventListener('abort', () => resolve(false));
+            frame.donePromise.then(() => resolve(true)).catch(reject);
         });
     }
 
     // ----------- Conversions
 
-    toResponse({ client: clientPort, signal: abortSignal } = {}) {
+    toResponse({ port: clientPort, signal: abortSignal } = {}) {
         if (clientPort && !(clientPort instanceof MessagePortPlus)) {
             throw new Error('Client must be a MessagePortPlus interface');
         }
 
         const response = ResponsePlus.from(this.body, {
-            status: this.status,
-            statusText: this.statusText,
-            headers: this.headers,
+            status: this.#status,
+            statusText: this.#statusText,
+            headers: this.#headers,
         });
 
         const responseMeta = _meta(this);
         _wq(response).set('meta', responseMeta);
 
-        if (clientPort && this.readyState === 'live') {
-            let undoInitialProjectMutations;
-            if (_isTypeObject(this.body) && !isTypeStream(this.body)) {
-                undoInitialProjectMutations = clientPort.projectMutations({
-                    from: this.body,
-                    to: 'initial_response',
-                    signal: abortSignal/* stop observing mutations on body when we abort */
-                });
+        if (!clientPort) return response;
+
+        if (_isTypeObject(this.#body) && !isTypeStream(this.#body)) {
+            clientPort.projectMutations({
+                from: this.#body,
+                to: 'initial_response',
+                signal: AbortSignal.any([this.#concurrencyAbortController.signal].concat(abortSignal || []))/* stop observing mutations on body when we abort */
+            });
+        }
+
+        const replaceHandler = () => {
+            const headers = Object.fromEntries([...this.headers.entries()]);
+
+            if (headers?.['set-cookie']) {
+                delete headers['set-cookie'];
+                console.warn('Warning: The "set-cookie" header is not supported for security reasons and has been removed from the response.');
             }
 
-            const replaceHandler = () => {
-                undoInitialProjectMutations?.();
-                undoInitialProjectMutations = null;
+            clientPort.postMessage({
+                body: this.#body,
+                status: this.#status,
+                statusText: this.#statusText,
+                headers,
+                concurrent: this.#concurrent,
+            }, { type: 'response.replace', live: true/*gracefully ignored if not an object*/, signal: AbortSignal.any([this.#concurrencyAbortController.signal].concat(abortSignal || []))/* stop observing mutations on body a new body takes effect */ });
+        };
 
-                const headers = Object.fromEntries([...this.headers.entries()]);
-
-                if (headers?.['set-cookie']) {
-                    delete headers['set-cookie'];
-                    console.warn('Warning: The "set-cookie" header is not supported for security reasons and has been removed from the response.');
-                }
-
-                clientPort.postMessage({
-                    body: this.body,
-                    status: this.status,
-                    statusText: this.statusText,
-                    headers,
-                    done: this.readyState === 'done',
-                }, { type: 'response.replace', live: true/*gracefully ignored if not an object*/, signal: this.#abortController.signal/* stop observing mutations on body a new body takes effect */ });
-            };
-
-            this.addEventListener('replace', replaceHandler, { signal: abortSignal/* stop listening when we abort */ });
-        }
+        this.addEventListener('replace', replaceHandler, { signal: abortSignal/* stop listening when we abort */ });
+        this.readyStateChange('done').then(() => {
+            clientPort.postMessage(null, { type: 'response.done' });
+        });
 
         return response;
     }
@@ -448,8 +509,8 @@ export class LiveResponse extends EventTarget {
 
     toLiveProgramHandle({ signal: abortSignal } = {}) {
         const handle = new LiveProgramHandleX;
-        
-        const replaceHandler = () => Observer.defineProperty(handle, 'value', { value: this.body, enumerable: true, configurable: true });
+
+        const replaceHandler = () => Observer.defineProperty(handle, 'value', { value: this.body, enumerable: false, configurable: true });
         this.addEventListener('replace', replaceHandler, { signal: abortSignal });
         replaceHandler();
 
@@ -460,7 +521,7 @@ export class LiveResponse extends EventTarget {
         const clone = new this.constructor();
 
         const responseMeta = _meta(this);
-        _wq(clone).set('meta', responseMeta);
+        _wq(clone).set('meta', new Map(responseMeta));
 
         clone.replaceWith(this, init);
         return clone;
@@ -477,18 +538,35 @@ export function getReadyStateInternals() {
     const portPlusMeta = _meta(this);
     if (!portPlusMeta.has('readystate_registry')) {
         const $ref = (o) => {
-            o.promise = new Promise((res, rej) => (o.resolve = () => res(this), o.reject = rej));
+            o.promise = new Promise((res, rej) => (o.resolve = res, o.reject = rej));
             return o;
         };
-        portPlusMeta.set('readystate_registry', {
+        const states = {
             live: $ref({}),
             done: $ref({}),
-        });
+        };
+        (function refresh() {
+            states.now = $ref({});
+            states.now.refresh = refresh;
+            return states.now;
+        })();
+        portPlusMeta.set('readystate_registry', states);
     }
     return portPlusMeta.get('readystate_registry');
 }
 
-class LiveProgramHandleX {
+export class ReplaceEvent extends Event {
+
+    #data;
+    get data() { return this.#data; }
+
+    constructor(responseFrame) {
+        super('replace');
+        this.#data = responseFrame;
+    }
+}
+
+export class LiveProgramHandleX {
     [Symbol.toStringTag] = 'LiveProgramHandle';
     abort() { }
 }

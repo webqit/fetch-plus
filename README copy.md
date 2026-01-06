@@ -10,7 +10,7 @@ Fetch+ introduces:
 1. **A LiveResponse API** – a new response primitive that makes realtime communication native to the existing request/response model.
 2. **Design extensions to the Fetch API** – a set of additions to `fetch`, `Request`, `Response`, `Headers`, and `FormData` that addresses the unintuitive parts of the API.
 
-These represent two distinct capability families but one coherent upgrade to the transport layer and its interfaces.
+These represent two distinct capability families but one cohenrent upgrade to the transport layer and its interfaces.
 
 This README is divided accordingly into two sections:
 
@@ -245,7 +245,7 @@ response.port.addEventListener('message', (event) => {
 
 ### Backend Integration
 
-`LiveResponse`-based backends are easy to build. This typically involves:
+`LiveReponse`-based backends are easy to build. This typically involves:
 
 1. Creating the server-side port and exposing it – as `request.port` for example
 2. Managing request + port lifecycles via abort signals
@@ -411,7 +411,7 @@ portRegistry.set(portId, req.port);
 // When the client connects...
 const wsPort = new WebSocketPort(ws);
 // use the port ID from the request URL
-// to identify the original port it belongs. Add it
+// to identifer the original port it belongs. Add it
 portRegistry.get(portId).addPort(wsPort);
 ```
 
@@ -443,7 +443,7 @@ import { BroadcastChannelPlus } from '@webqit/port-plus';
 // Create a Broadcast Channel that the client will connect to
 // Mark it as the "server" port
 const portId = crypto.randomUUID();
-const req.port = new BroadcastChannelPlus(portId, {
+const req.port = new BroadcastChannelPlus(portID, {
     clientServerMode: 'server',
     postAwaitsOpen: true,
     autoStart: true // Ensure it's ready to accept connections
@@ -471,7 +471,7 @@ The resulting `response.port` interface on the client is `BroadcastChannelPlus`.
 ##### Main Thread ◀────▶ Main Thread
 
 For Single Page Applications that handle navigations with a request/response model right in the browser UI,
-it may be desired to support the LiveResponse model – and that is possible. Since there is no concept of the network layer, no encoding and decoding
+it may be desired to support the Liveesponse model – and that is possible. Since there is no concept of the network layer, no encoding and decoding
 between LiveResponse and standard Response is required; just direct passing of a LiveResponse instance.
 
 The port model for this scenario is MessageChannel. The request handler creates an instance and holds on to `port1` or `port2`, and
@@ -509,7 +509,7 @@ Together, that typically looks like: `"socket:///?port_id=smkdnjdnjd67734n"` | `
 #### Mutations
 
 Mutability is a foundational concept in LiveResponse. It gives the mental model of a stable object reference across time, with the potential
-to change. This concept of "state" (stable identity) and "mutability" ("change" as a property of state) is what LiveResponse unifies across the network boundary, or process boundary.
+to change. This concept of "state" (stable identity) and "mutability" ("change" as a property os state) is what LiveResponse unifies across the network boundary, or process boundary.
 With LiveResponse, "state" on the server (or in a certain JavaScript process) can be projected (as [above](#1-live-state-projection-via-mutable-response-bodies)) to the client (or another JavaScript process) for a shared identity and continuity.
 
 For mutation-based reactivity, LiveResponse is backed by the [Observer](https://github.com/webqit/observer) API. When an object or array is passed as response body, subsequent mutations made to it via the Observer API are observed by LiveResponse and projected
@@ -539,15 +539,15 @@ Observer.observe(state, () => {
 });
 ```
 
-Identity is stable universally, continuity is achieved, and reactive model is shared.
+Identity is stable universally, continuity is acheived, and reactive model is shared.
 
 Beyond being used to make or observe mutations at the object level, Observer can also be used to observe the response instance
 itself for body-replace events.
 
 ```js
 Observer.observe(response, 'body', (m) => {
-    console.log(m.oldValue); // null
-    console.log(m.value); // { a: 1 }
+    console..log(m.oldValue); // null
+    console..log(m.value); // { a: 1 }
 });
 ```
 
@@ -555,11 +555,11 @@ Observer.observe(response, 'body', (m) => {
 response.replaceWith({ a: 1 });
 ```
 
-By comparison, LiveResponse's `"replace"` event fires for the same operation, but emits the fully-resolved response frame in the event:
+By comparson, LiveResponse's `"replace"` event fires for the same operation, but emits the fully-resolved response frame in the event:
 
 ```js
 response.addEventListener('replace', (e) => {
-    console.log(e.data); // { body: { a: 1 }, status: 200, statusText: '', ... }
+    console..log(e.data); // { body: { a: 1 }, status: 200, statusText: '', ... }
 });
 ```
 
@@ -567,7 +567,7 @@ Another distinction between the two methods is that Observer can observe depth:
 
 ```js
 Observer.observe(response, Observer.path('body', 'a', 'b'), (m) => {
-    console.log(m.value); // 22
+    console..log(m.value); // 22
 });
 ```
 
@@ -838,7 +838,7 @@ A LiveResponse instance transitions through three states in its lifetime:
 For _synchronously-resolvable_ inputs like strings and objects, the instance transitions to `live` synchronously:
 
 ```js
-const response = new LiveResponse('Initial frame');
+const response = new LiveResponse('Inital frame');
 console.log(response.readyState); // "live"
 ```
 
@@ -846,7 +846,7 @@ It transitions to "done" at `Promise.resolve()` timing:
 
 ```js
 Promise.resolve().then(() => console.log(response.readyState)); // "done"
-// Or simply:
+// Or simplly:
 // await Promise.resolve();
 // console.log(response.readyState); // "done"
 ```
@@ -854,11 +854,11 @@ Promise.resolve().then(() => console.log(response.readyState)); // "done"
 For _asynchronously-resolved_ inputs like promise-wrapped values and Response instances, the instance transitions to `live` at the resolution timing of the input:
 
 ```js
-const response = new LiveResponse(Promise.resolve('Initial frame'));
+const response = new LiveResponse(Promise.resolve('Inital frame'));
 console.log(response.readyState); // "waiting"
 
 Promise.resolve().then(() => console.log(response.readyState)); // "live"
-// Or simply:
+// Or simplly:
 // await Promise.resolve();
 // console.log(response.readyState); // "live"
 ```
@@ -867,7 +867,7 @@ It transitions to "done" at 2 x `Promise.resolve()` timing:
 
 ```js
 Promise.resolve().then(() => Promise.resolve().then(() => console.log(response.readyState))); // "done"
-// Or simply:
+// Or simplly:
 // await Promise.resolve();
 // await Promise.resolve();
 // console.log(response.readyState); // "done"
@@ -991,7 +991,7 @@ Promise.resolve().then(() => {
     console.log(response.body); // "Hello World"
     console.log(response.headers.get('Content-Type')); // "text/plain"
 });
-// Or simply:
+// Or simplly:
 // await Promise.resolve();
 // console.log(response.body); // "Hello World"
 // console.log(response.headers.get('Content-Type')); // "text/plain"
@@ -1017,7 +1017,7 @@ console.log((await response.now()).headers.get('Content-Type')); // "text/plain"
 As a general rule, `.now()` snapshots at _call time_ and resolves at _resolution time_.
 This means `.now()` gives predictable results regardless of the resolution timing of the input.
 
-In a sequence of "replace" operations, for example, a previous replacement, if asynchronous, may yet be resolving when the next comes, and if so, is abandoned for the next. `.now()` resolves predictably even on abandoned frames.
+In a sequence of "replace" operations, for example, a previous replacement, if asynchronous, may yet be resolving when the next comes, and if so, is abandoned for the next. `.now()` resolves predictably even on abanddoned frames.
 
 ```js
 const frame1 = new Promise((resolve) => setTimeout(() => resolve('frame 1'), 10));
@@ -1025,7 +1025,7 @@ const frame1 = new Promise((resolve) => setTimeout(() => resolve('frame 1'), 10)
 const response = new LiveResponse(frame1, { done: false });
 const snapshot1 = response.now(); // Snapshot 'frame 1' while still resolving
 
-response.replaceWith('frame 2', { done: false }); // 'frame 1' is abandoned now while still resolving
+response.replaceWith('frame 2', { done: false }); // 'frame 1' is abanddoned now while still resolving
 const snapshot2 = response.now(); // Snapshot 'frame 2'
 
 const frame3 = new Promise((resolve) => setTimeout(() => resolve('frame 3'), 10));
@@ -1033,7 +1033,7 @@ response.replaceWith(frame3, { done: false }); // 'frame 2' – which resolved s
 const snapshot3 = response.now(); // Snapshot 'frame 3' while still resolving
 
 const frame4 = new Promise((resolve) => setTimeout(() => resolve('frame 4'), 10));
-response.replaceWith(frame4, { done: true }); // 'frame 3' is abandoned now while still resolving
+response.replaceWith(frame4, { done: true }); // 'frame 3' is abanddoned now while still resolving
 const snapshot4 = response.now(); // Snapshot 'frame 4' while still resolving
 
 console.log((await snapshot1).body); // 'frame 1'
@@ -1051,7 +1051,7 @@ await response.replaceWith(frame5, { done: false });
 console.log(response.body); // 'frame 5'
 ```
 
-For multi-frame inputs like `Generators`, `.replaceWith()` resolves at the resolution timing of the last subframe.
+For muti-frame inputs like `Generators`, `.replaceWith()` resolves at the resolution timing of the last subframe.
 This is when the frame cycle is considered complete from the perspective of the caller, making it easy to coordinate subsequent replacements.
 
 For example, `replaceStatus5_7` below, resolves `200+ms` later:
@@ -1132,12 +1132,12 @@ response.replaceWith('frame 6');
 **Summary:**
 
 + At any point, `.now()` helps ensure that you are accessing the instance with the most current frame already "live" on the instance.
-  + It is also useful for "Give me a Promise that resolves when my last `.replaceWith()` call resolves" – whether it indeed goes live on the instance or not
+  + It is also useful for "Give me a Promise that resolves when my last `.replaceWith()` call resolves" – whether it indded goes live on the instance or not
 + The promise returned by `.replaceWith()` is also useful for "Give me a Promise that resolves when the given input resolves"
-  + But it additionally answers "Did that successfully go live on the instance or was it abandoned for a newer `.replaceWith()` or `.disconnect()` call?"
+  + But it additionally answers "Did that successfully go live on the instance or or was it abaddoned for a newer `.replaceWith()` or `.disconnect()` call?"
 + While `.now()` and `.replaceWith()` may resolve equally at the resolution timing of certain inputs, they don't always – as they are designed to answer different questions.
-  + For multi-frame inputs like `Generators`, `.replaceWith()` resolves at the resolution timing of the last frame. `.now()` resolves at that of the first
-  + `.replaceWith()` may resolve sooner if superseded by another `.replaceWith()` call, or abandoned via `.disconnect()`, before completion
+  + For muti-frame inputs like `Generators`, `.replaceWith()` resolves at the resolution timing of the last frame. `.now()` resolves at that of the first
+  + `.replaceWith()` may resolve sooner if superceded by another `.replaceWith()` call, or abaddoned via `.disconnect()`, before completion
 
 #### 3. The Live-State Projection Cycle
 
@@ -1261,8 +1261,8 @@ const body = await response.any({ to: 'bytes' }); // Uint8Array
 
 **Notes:**
 
-+ Type coercion to structured formats – `json` | `formData` – is supported for any of `application/json` | `application/x-www-form-urlencoded` | `multipart/form-data`. In other words, any of the these three payload types can be cast to `json` or `formData` interchangeably.
-+ Type coercion to unstructured formats – `text` | `arrayBuffer` | `blob` | `bytes` – is supported for ALL content-types, including `application/json` | `application/x-www-form-urlencoded` | `multipart/form-data`.
++ Type concercion to structured formats – `json` | `formData` – is supported for any of `application/json` | `application/x-www-form-urlencoded` | `multipart/form-data`. In other words, any of the these three payload types can be cast to `json` or `formData` interchangeably.
++ Type concercion to unstructured formats – `text` | `arrayBuffer` | `blob` | `bytes` – is supported for ALL content-types, including `application/json` | `application/x-www-form-urlencoded` | `multipart/form-data`.
 
 **Example 3: _Memoization_**
 
@@ -1275,7 +1275,7 @@ const body = await response.any({ memo: true }); // Returns cached result
 **Notes:**
 
 + With `memo: true`, an automatic clone of the instance is kept the first time instance is read to support future reads.
-+ Results are also memoized – by type – the first time the specified type is processed.
++ Results are also memoized – by type – the first time the specicified type is processed.
 + For results of type `json` | `formData`, the result of each call is a _copy_ of the cached. For other types, the result of each call _is_ the cached.
 + Cache can be cleared at any time by calling `.forget()` on the instance. (A synchronous method.)
 
@@ -1376,7 +1376,7 @@ self.addEventListener('fetch', (event) => {
 **APIs**: `RequestPlus.from()` / `ResponsePlus.from()`
 
 The `.from()` static method is a factory method for creating new Request/Response instances directly from application data – JSON objects, strings, etc. – without the strict formatting requirement of the `Request`/`Response` constructors.
-`.from()` automatically converts the given input to the required payload format and auto-adds the corresponding `Content-Type` header (and the `Content-Length` header, where possible) – yielding:
+`.from()` autoomatically converts the given input to the required payload format and auto-adds the corresponding `Content-Type` header (and the `Content-Length` header, where possible) – yielding:
 
 + body type `FormData` with content-type `"multipart/form-data"` – for `FormData` inputs and JSON object inputs containing complex data types like `Blobs`
 + body type JSON string with content-type `"application/json"` – and the appropriate content-length value – for plain JSON object inputs

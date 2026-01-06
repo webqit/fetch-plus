@@ -1,4 +1,4 @@
-import { messageParserMixin, _meta, _wq } from './core.js';
+import { messageParserMixin, _meta, _wq } from './messageParserMixin.js';
 import { HeadersPlus } from './HeadersPlus.js';
 
 export class RequestPlus extends messageParserMixin(Request) {
@@ -25,8 +25,8 @@ export class RequestPlus extends messageParserMixin(Request) {
             $type = $$type;
         }
 
-        const instance = new this.constructor(url, init);
-        
+        const instance = new this(url, init);
+
         if (memoize) {
             const cache = _meta(instance, 'cache');
             const typeMap = { json: 'json', FormData: 'formData', text: 'text', ArrayBuffer: 'arrayBuffer', Blob: 'blob', Bytes: 'bytes' };
@@ -48,7 +48,7 @@ export class RequestPlus extends messageParserMixin(Request) {
                         : request[prop])
             }
         ), {});
-        if (!['GET', 'HEAD'].includes(init.method?.toUpperCase() || request.method)) {
+        if (!['GET', 'HEAD'].includes(requestInit.method.toUpperCase())) {
             if ('body' in init) {
                 requestInit.body = init.body
                 if (!('headers' in init)) {
@@ -58,11 +58,13 @@ export class RequestPlus extends messageParserMixin(Request) {
             } else {
                 requestInit.body = await request.clone().arrayBuffer();
             }
+        } else {
+            requestInit.body = null;
         }
         if (requestInit.mode === 'navigate') {
             requestInit.mode = 'cors';
         }
-        return { url: request.url, ...requestInit };
+        return { url: init.url || request.url, ...requestInit };
     }
 
     clone() {
@@ -71,8 +73,8 @@ export class RequestPlus extends messageParserMixin(Request) {
 
         const requestMeta = _meta(this);
         _wq(clone).set('meta', new Map(requestMeta));
-        if (requestMeta.has('cache')) {
-            requestMeta.set('cache', new Map(requestMeta.get('cache')));
+        if (_meta(clone).has('cache')) {
+            _meta(clone).set('cache', new Map(requestMeta.get('cache')));
         }
 
         return clone;

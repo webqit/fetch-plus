@@ -1,4 +1,4 @@
-import { messageParserMixin, _meta, _wq } from './core.js';
+import { messageParserMixin, _meta, _wq } from './messageParserMixin.js';
 import { HeadersPlus } from './HeadersPlus.js';
 
 export class ResponsePlus extends messageParserMixin(Response) {
@@ -18,14 +18,14 @@ export class ResponsePlus extends messageParserMixin(Response) {
     static from(body, { memoize = false, ...init } = {}) {
         if (body instanceof Response) return body;
 
-        let $type, $body = body;
-        if (body || body === 0) {
+        let $type;
+        if (typeof body !== 'undefined') {
             let headers;
             ({ body, headers, $type } = super.from({ body, headers: init.headers }));
             init = { ...init, headers };
         }
 
-        const instance = new this.constructor(body, init);
+        const instance = new this(body, init);
 
         if (memoize) {
             const cache = _meta(instance, 'cache');
@@ -47,8 +47,8 @@ export class ResponsePlus extends messageParserMixin(Response) {
 
         const responseMeta = _meta(this);
         _wq(clone).set('meta', new Map(responseMeta));
-        if (responseMeta.has('cache')) {
-            responseMeta.set('cache', new Map(responseMeta.get('cache')));
+        if (_meta(clone).has('cache')) {
+            _meta(clone).set('cache', new Map(responseMeta.get('cache')));
         }
 
         return clone;

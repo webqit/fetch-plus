@@ -1,7 +1,7 @@
 import { _before } from '@webqit/util/str/index.js';
 import { _isNumeric } from '@webqit/util/js/index.js';
-import { URLSearchParamsPlus } from './URLSearchParamsPlus.js';
-import { dataType, _meta, _wq } from './core.js';
+import { URLSearchParamsPlus } from '@webqit/url-plus';
+import { dataType, _meta, _wq } from './messageParserMixin.js';
 
 export class FormDataPlus extends FormData {
 
@@ -10,47 +10,52 @@ export class FormDataPlus extends FormData {
         return Object.setPrototypeOf(formData, FormDataPlus.prototype);
     }
 
-    static json(data = {}, { recursive = true, getIsJsonfiable = false } = {}) {
+    static json(data = {}, { encodeLiterals = true, meta = false } = {}) {
         const formData = new FormDataPlus;
-        let isJsonfiable = true;
+        let isDirectlySerializable = true;
 
         URLSearchParamsPlus.reduceValue(data, '', (value, contextPath, suggestedKeys = undefined) => {
             if (suggestedKeys) {
                 const isJson = dataType(value) === 'json';
-                isJsonfiable = isJsonfiable && isJson;
+                isDirectlySerializable = isDirectlySerializable && isJson;
                 return isJson && suggestedKeys;
             }
 
-            if (recursive && [true, false, null].includes(value)) {
+            if (encodeLiterals && [true, false, null].includes(value)) {
                 value = new Blob([value + ''], { type: 'application/json' });
             }
 
             formData.append(contextPath, value);
         });
 
-        if (getIsJsonfiable) return [formData, isJsonfiable];
+        if (meta) return { result: formData, isDirectlySerializable };
         return formData;
     }
 
-    async json({ recursive = true, getIsJsonfiable = false } = {}) {
-        let isJsonfiable = true;
+    async json({ decodeLiterals = true, meta = false } = {}) {
+        let isDirectlySerializable = true;
         let json;
 
         for (let [name, value] of this.entries()) {
             if (!json) json = _isNumeric(_before(name, '[')) ? [] : {};
 
             let type = dataType(value);
-            if (recursive && ['Blob', 'File'].includes(type) && value.type === 'application/json') {
-                let _value = await value.text();
-                value = JSON.parse(_value);
-                type = 'json';
+            if (decodeLiterals
+                && ['Blob', 'File'].includes(type)
+                && value.type === 'application/json'
+                && [4, 5].includes(value.size)) {
+                let _value = JSON.parse(await value.text());
+                if ([null, true, false].includes(_value)) {
+                    value = _value;
+                    type = 'json';
+                }
             }
 
-            isJsonfiable = isJsonfiable && type === 'json';
+            isDirectlySerializable = isDirectlySerializable && type === 'json';
             URLSearchParamsPlus.set(json, name, value);
         }
 
-        if (getIsJsonfiable) return [json, isJsonfiable];
+        if (meta) return { result: json, isDirectlySerializable };
         return json;
     }
 }
