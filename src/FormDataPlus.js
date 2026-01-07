@@ -52,6 +52,9 @@ export class FormDataPlus extends FormData {
             }
 
             isDirectlySerializable = isDirectlySerializable && type === 'json';
+            if (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
+                value = Number(value);
+            }
             URLSearchParamsPlus.set(json, name, value);
         }
 

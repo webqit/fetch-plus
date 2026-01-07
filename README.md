@@ -19,8 +19,8 @@ This README is divided accordingly into two sections:
 
 > [!NOTE]
 >
-> This README tries to be exhaustive with the details. It comes long, as a consequence.
-> The irony of this is that Fetch+ itself is only `3KiB min | zip` in total.
+> The documentation is expansive by design.
+> The code doing the work is not — Fetch+ weighs `3 KiB min | gzip`.
 
 ---
 
@@ -2042,7 +2042,7 @@ console.log(isDirectlySerializable); // false
 
 ## License
 
-MIT © Oxford Harrison
+MIT
 
 [npm-version-src]: https://img.shields.io/npm/v/@webqit/fetch-plus?style=flat&colorA=18181B&colorB=F0DB4F
 [npm-version-href]: https://npmjs.com/package/@webqit/fetch-plus
