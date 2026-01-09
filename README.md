@@ -20,7 +20,7 @@ This README is divided accordingly into two sections:
 > [!NOTE]
 >
 > The documentation is expansive by design.
-> The code doing the work is not — Fetch+ weighs `3 KiB min | gzip`.
+> The code doing the work is not — Fetch+ weighs < `7 KiB min | gzip`.
 
 ---
 
