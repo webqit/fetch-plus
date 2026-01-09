@@ -1,4 +1,4 @@
-# Fetch+ – _Advanced HTTP for the Modern Web_
+# Fetch+ – _The LiveResponse API & Advanced Fetch for the Modern Web_
 
 [![npm version][npm-version-src]][npm-version-href]
 [![bundle][bundle-src]][bundle-href]
