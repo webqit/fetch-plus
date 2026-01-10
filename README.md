@@ -318,7 +318,7 @@ app.ws('/', function(ws, req) {
         return;
     }
     const portId = url.searchParams.get('port_id');
-    const wsPort = new WebSocketPort(ws);
+    const wsPort = new WebSocketPort(ws, { autoStart: true, naturalOpen: false });
     // All connecting clients over portId go into the same star port
     portRegistry.get(portId).addPort(wsPort);
 });
