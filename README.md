@@ -252,9 +252,11 @@ response.port.addEventListener('message', (event) => {
 3. Converting `LiveResponse` to a standard response
 4. Adding the `X-Message-Port` header to the outgoing response
 
-See the sample Express.js integration below for a complete example.
+Depending on your use case:
 
-For a framework with a live-mode-first architecture, see [Webflo](https://github.com/webqit/webflo).
++ See the sample Express.js integration below for a custom integration example.
++ See the [`@webqit/node-live-response`](https://github.com/webqit/node-live-response) package for a direct Node.js or Express.js integration.
++ See [Webflo](https://github.com/webqit/webflo) for a framework with a live-mode-first architecture.
 
 #### Sample Express.js Integration
 
