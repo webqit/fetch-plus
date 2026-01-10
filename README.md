@@ -247,8 +247,8 @@ response.port.addEventListener('message', (event) => {
 
 `LiveResponse`-based backends are easy to build. This typically involves:
 
-1. Creating the server-side port and exposing it – as `request.port` for example
-2. Managing request + port lifecycles via abort signals
+1. Creating the server-side port and exposing it – e.g. as `request.port`
+2. Managing request + port lifecycles via an abort signal
 3. Converting `LiveResponse` to a standard response
 4. Adding the `X-Message-Port` header to the outgoing response
 
