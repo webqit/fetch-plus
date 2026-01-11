@@ -448,7 +448,7 @@ const portId = crypto.randomUUID();
 const req.port = new BroadcastChannelPlus(portId, {
     clientServerMode: 'server',
     postAwaitsOpen: true,
-    autoStart: true // Ensure it's ready to accept connections
+    handshake: 1 // Ensure it's ready to accept connections
 });
 ```
 
