@@ -77,6 +77,8 @@ export function messageParserMixin(superClass) {
                 'blob', 'text', 'json', 'arrayBuffer', 'bytes', 'formData'
             ].includes(to)) throw new Error(`Invalid target type specified: ${to}`);
 
+            if (this.body === null) return null;
+
             const cache = _meta(this, 'cache');
             const readAs = async (type) => {
                 // 1. Direct parsing
