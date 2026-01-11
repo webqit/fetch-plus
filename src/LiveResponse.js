@@ -6,16 +6,26 @@ import { ResponsePlus } from './ResponsePlus.js';
 
 export class LiveResponse extends EventTarget {
 
+    get [Symbol.toStringTag]() {
+        return 'LiveResponse';
+    }
+
+    static [Symbol.hasInstance](instance) {
+        return instance instanceof EventTarget
+            && instance?.[Symbol.toStringTag] === 'LiveResponse'
+            && typeof instance.replaceWith === 'function'
+            && typeof instance.now === 'function';
+    }
+
     static get xHeaderName() {
         return 'X-Message-Port';
     }
 
     static test(unknown) {
-        if (unknown instanceof LiveResponse
-            || unknown?.[Symbol.toStringTag] === 'LiveResponse') {
+        if (unknown instanceof LiveResponse) {
             return 'LiveResponse';
         }
-        if (unknown?.[Symbol.toStringTag] === 'LiveProgramHandle') {
+        if (unknown instanceof LiveProgramHandleX) {
             return 'LiveProgramHandle';
         }
         if (unknown instanceof Response) {
@@ -34,7 +44,8 @@ export class LiveResponse extends EventTarget {
     }
 
     static getPort(respone, { handshake = 1 } = {}) {
-        if (!/Response/.test(this.test(respone))) {
+        if (!(respone instanceof Response
+            || respone instanceof LiveResponse)) {
             return;
         }
 
@@ -72,7 +83,7 @@ export class LiveResponse extends EventTarget {
     }
 
     static from(data, ...args) {
-        if (this.test(data) === 'LiveResponse') {
+        if (data instanceof LiveResponse) {
             return data.clone(...args);
         }
         return new this(data, ...args);
@@ -80,17 +91,32 @@ export class LiveResponse extends EventTarget {
 
     /* INSTANCE */
 
-    [Symbol.toStringTag] = 'LiveResponse';
-
     #listenersRegistry;
+    #readyStates;
+
+    #abortController = new AbortController;
+    #concurrencyAbortController = new AbortController;
 
     constructor(body, ...args) {
         super();
         this.#listenersRegistry = ListenerRegistry.getInstance(this, true);
 
-        const readyStateInternals = getReadyStateInternals.call(this);
-        const frame = readyStateInternals.now;
+        const $ref = (o) => {
+            o.promise = new Promise((res, rej) => (o.resolve = res, o.reject = rej));
+            return o;
+        };
+        this.#readyStates = {
+            live: $ref({}),
+            done: $ref({}),
+        };
+        const readyStates = this.#readyStates;
+        (function refresh() {
+            readyStates.now = $ref({});
+            readyStates.now.refresh = refresh;
+            return readyStates.now;
+        })();
 
+        const frame = this.#readyStates.now;
         this.#replaceWith(frame, body, ...args).catch((e) => {
             frame.reject(e);
         });
@@ -128,11 +154,6 @@ export class LiveResponse extends EventTarget {
 
     get ok() { return !!(this.#status >= 200 && this.#status < 299); }
 
-    async now() {
-        const readyStateInternals = getReadyStateInternals.call(this);
-        return readyStateInternals.now.promise;
-    }
-
     /* Level 3 props */
 
     #port;
@@ -140,21 +161,16 @@ export class LiveResponse extends EventTarget {
 
     // Lifecycle
 
-    #abortController = new AbortController;
-    #concurrencyAbortController = new AbortController;
-
     get readyState() {
-        const readyStateInternals = getReadyStateInternals.call(this);
-        return readyStateInternals.done.state ? 'done'
-            : (readyStateInternals.live.state ? 'live' : 'waiting');
+        return this.#readyStates.done.state ? 'done'
+            : (this.#readyStates.live.state ? 'live' : 'waiting');
     }
 
     readyStateChange(query) {
         if (!['live', 'now', 'done'].includes(query)) {
             throw new Error(`Invalid readyState query "${query}"`);
         }
-        const readyStateInternals = getReadyStateInternals.call(this);
-        return readyStateInternals[query].promise;
+        return this.#readyStates[query].promise;
     }
 
     disconnect(dispose = false) {
@@ -168,26 +184,27 @@ export class LiveResponse extends EventTarget {
 
     #currentFramePromise;
     #extendLifecycle(promise) {
-        const readyStateInternals = getReadyStateInternals.call(this);
-        if (readyStateInternals.done.state) {
+        if (this.#readyStates.done.state) {
             throw new Error('Response already done.');
         }
         this.#currentFramePromise = promise;
         promise.then((value) => {
             if (this.#currentFramePromise === promise) {
                 this.#currentFramePromise = null;
-                readyStateInternals.done.state = true;
-                readyStateInternals.done.resolve(value);
+                this.#readyStates.done.state = true;
+                this.#readyStates.done.resolve(value);
             }
         }).catch((e) => {
             if (this.#currentFramePromise === promise) {
                 this.#currentFramePromise = null;
-                readyStateInternals.done.state = true;
-                readyStateInternals.done.reject(e);
+                this.#readyStates.done.state = true;
+                this.#readyStates.done.reject(e);
             }
         });
         return promise;
     }
+
+    async now() { return this.#readyStates.now.promise; }
 
     async replaceWith(body, ...args) {
         if (this.readyState === 'done') {
@@ -198,8 +215,7 @@ export class LiveResponse extends EventTarget {
     }
 
     async #replaceWith(__frame, body, ...args) {
-        const readyStateInternals = getReadyStateInternals.call(this);
-        const frame = __frame || readyStateInternals.now.refresh();
+        const frame = __frame || this.#readyStates.now.refresh();
 
         // ----------- Promise input
 
@@ -231,7 +247,7 @@ export class LiveResponse extends EventTarget {
                 return;
             }
 
-            const frame = __frame || readyStateInternals.now.refresh();
+            const frame = __frame || this.#readyStates.now.refresh();
 
             const $body = responseFrame.body;
 
@@ -273,8 +289,8 @@ export class LiveResponse extends EventTarget {
 
             // Must come first so that observers below here see this state
 
-            readyStateInternals.live.state = true;
-            readyStateInternals.live.resolve(this);
+            this.#readyStates.live.state = true;
+            this.#readyStates.live.resolve(this);
 
             // May trigger "done" ready state
             frame.resolve(responseFrame);
@@ -326,7 +342,7 @@ export class LiveResponse extends EventTarget {
                 url: response.url,
             });
 
-            if (this.constructor.test(response) === 'LiveResponse') {
+            if (response instanceof LiveResponse) {
                 const replaceHandler = () => {
                     wrapReplaceWith(null, response.body, response);
                 };
@@ -429,17 +445,18 @@ export class LiveResponse extends EventTarget {
 
         // ----------- Dispatch time
 
-        if (/Response/.test(this.constructor.test(body))) {
+        if (body instanceof Response
+            || body instanceof LiveResponse) {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for responses.`);
             }
             frame.donePromise = execReplaceWithResponse(frame, body, frameOptions);
-        } else if (this.constructor.test(body) === 'Generator') {
+        } else if (isGenerator(body)) {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for generators.`);
             }
             frame.donePromise = execReplaceWithGenerator(frame, body, frameOptions);
-        } else if (this.constructor.test(body) === 'LiveProgramHandle') {
+        } else if (body instanceof LiveProgramHandleX) {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for live program handles.`);
             }
@@ -554,28 +571,14 @@ export const isGenerator = (obj) => {
         typeof obj?.return === 'function';
 };
 
-export function getReadyStateInternals() {
-    const portPlusMeta = _meta(this);
-    if (!portPlusMeta.has('readystate_registry')) {
-        const $ref = (o) => {
-            o.promise = new Promise((res, rej) => (o.resolve = res, o.reject = rej));
-            return o;
-        };
-        const states = {
-            live: $ref({}),
-            done: $ref({}),
-        };
-        (function refresh() {
-            states.now = $ref({});
-            states.now.refresh = refresh;
-            return states.now;
-        })();
-        portPlusMeta.set('readystate_registry', states);
-    }
-    return portPlusMeta.get('readystate_registry');
-}
-
 export class ReplaceEvent extends Event {
+
+    [Symbol.toStringTag] = 'ReplaceEvent';
+
+    static [Symbol.hasInstance](instance) {
+        return instance instanceof Event
+            && instance[Symbol.toStringTag] === 'ReplaceEvent';
+    }
 
     #data;
     get data() { return this.#data; }
@@ -588,5 +591,10 @@ export class ReplaceEvent extends Event {
 
 export class LiveProgramHandleX {
     [Symbol.toStringTag] = 'LiveProgramHandle';
+
+    static [Symbol.hasInstance](instance) {
+        return instance?.[Symbol.toStringTag] === 'LiveProgramHandle';
+    }
+
     abort() { }
 }
