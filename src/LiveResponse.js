@@ -63,6 +63,10 @@ export class LiveResponse extends EventTarget {
         if (port && !(port instanceof MessagePortPlus)) {
             throw new Error('Client must be a MessagePortPlus interface');
         }
+        if (respone instanceof LiveResponse) {
+            respone.#port = port;
+            return;
+        }
         const responseMeta = _meta(respone);
         responseMeta.set('port', port);
     }
