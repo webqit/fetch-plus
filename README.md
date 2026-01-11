@@ -236,9 +236,10 @@ Note that `request.port` above is assumed to be injected by the application runt
 
 ```js
 const response = new LiveResponse(await fetch('http://localhost/hello'));
+const { port } = await response.now();
 
-response.port.postMessage('Hello from client');
-response.port.addEventListener('message', (event) => {
+port.postMessage('Hello from client');
+port.addEventListener('message', (event) => {
     console.log(event.data); // Hello from server
 });
 ```
@@ -398,7 +399,7 @@ This is done via the `X-Message-Port` header.
 import { StarPort, WebSocketPort } from '@webqit/port-plus';
 
 // Create a port that will contain the ws instance
-req.port = new StarPort();
+req.port = new StarPort({ handshake: 1, postAwaitsOpen: true, autoClose: true });
 const portId = crypto.randomUUID();
 portRegistry.set(portId, req.port);
 ```
