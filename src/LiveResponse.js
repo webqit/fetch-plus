@@ -354,7 +354,7 @@ export class LiveResponse extends EventTarget {
 
             if (port) {
                 // Bind to upstream mutations
-                if (jsonSuccess) {
+                if (jsonSuccess && body !== null) {
                     port.projectMutations({
                         from: 'initial_response',
                         to: body,
@@ -527,7 +527,7 @@ export class LiveResponse extends EventTarget {
             }, { type: 'response.replace', live: true/*gracefully ignored if not an object*/, signal: AbortSignal.any([this.#concurrencyAbortController.signal].concat(abortSignal || []))/* stop observing mutations on body a new body takes effect */ });
         };
 
-        this.addEventListener('replace', replaceHandler, { signal: abortSignal/* stop listening when we abort */ });
+        this.addEventListener('replace', replaceHandler, { signal: abortSignal || undefined/* NO NULLS stop listening when we abort */ });
         this.readyStateChange('done').then(() => {
             clientPort.postMessage(null, { type: 'response.done' });
         });
@@ -539,7 +539,7 @@ export class LiveResponse extends EventTarget {
         do {
             yield this.body;
         } while (await new Promise((resolve) => {
-            this.addEventListener('replace', () => resolve(true), { once: true, signal: abortSignal });
+            this.addEventListener('replace', () => resolve(true), { once: true, signal: abortSignal || undefined/* NO NULLS */ });
             this.readyStateChange('done').then(() => resolve(false));
         }));
     }
@@ -548,7 +548,7 @@ export class LiveResponse extends EventTarget {
         const handle = new LiveProgramHandleX;
 
         const replaceHandler = () => Observer.defineProperty(handle, 'value', { value: this.body, enumerable: false, configurable: true });
-        this.addEventListener('replace', replaceHandler, { signal: abortSignal });
+        this.addEventListener('replace', replaceHandler, { signal: abortSignal || undefined/* NO NULLS */ });
         replaceHandler();
 
         return handle;
