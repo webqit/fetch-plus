@@ -318,14 +318,14 @@ app.ws('/', function(ws, req) {
         return;
     }
     const portId = url.searchParams.get('port_id');
-    const wsPort = new WebSocketPort(ws, { autoStart: true, naturalOpen: false });
+    const wsPort = new WebSocketPort(ws, { handshake: 1, postAwaitsOpen: true });
     // All connecting clients over portId go into the same star port
     portRegistry.get(portId).addPort(wsPort);
 });
 
 async function interactiveRoute(req, res, handle) {
     // --- before handle ---
-    req.port = new StarPort();
+    req.port = new StarPort({ handshake: 1, postAwaitsOpen: true, autoClose: true });
     const portId = crypto.randomUUID();
     portRegistry.set(portId, req.port);
 

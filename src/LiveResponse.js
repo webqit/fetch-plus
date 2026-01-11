@@ -28,13 +28,16 @@ export class LiveResponse extends EventTarget {
     }
 
     static hasPort(respone) {
-        return !!respone.headers?.get?.(this.xHeaderName)?.trim();
+        const responseMeta = _meta(respone);
+        return !!responseMeta.get('port')
+            || !!respone.headers?.get?.(this.xHeaderName)?.trim();
     }
 
-    static getPort(respone, autoStart = false) {
+    static getPort(respone, { handshake = 1 } = {}) {
         if (!/Response/.test(this.test(respone))) {
             return;
         }
+
         const responseMeta = _meta(respone);
 
         if (!responseMeta.has('port')) {
@@ -47,8 +50,8 @@ export class LiveResponse extends EventTarget {
             }
 
             const port = scheme === 'channel'
-                ? new BroadcastChannelPlus(portID, { autoStart, postAwaitsOpen: true, clientServerMode: 'client' })
-                : new WebSocketPort(portID, { autoStart, naturalOpen: false, postAwaitsOpen: true });
+                ? new BroadcastChannelPlus(portID, { handshake, postAwaitsOpen: true, clientServerMode: 'client' })
+                : new WebSocketPort(portID, { handshake, postAwaitsOpen: true });
 
             responseMeta.set('port', port);
         }
@@ -57,7 +60,7 @@ export class LiveResponse extends EventTarget {
     }
 
     static attachPort(respone, port) {
-        if (!(port instanceof MessagePortPlus)) {
+        if (port && !(port instanceof MessagePortPlus)) {
             throw new Error('Client must be a MessagePortPlus interface');
         }
         const responseMeta = _meta(respone);
@@ -128,7 +131,8 @@ export class LiveResponse extends EventTarget {
 
     /* Level 3 props */
 
-    get port() { return this.constructor.getPort(this, true); }
+    #port;
+    get port() { return this.#port; }
 
     // Lifecycle
 
@@ -245,6 +249,8 @@ export class LiveResponse extends EventTarget {
             this.#body = $body;
             this.#concurrent = !!responseFrame.concurrent;
 
+            this.#port = responseFrame.port;
+
             if (!this.#concurrent) {
                 this.#concurrencyAbortController.abort();
                 this.#concurrencyAbortController = new AbortController;
@@ -290,14 +296,18 @@ export class LiveResponse extends EventTarget {
         // ----------- "Response" handler
 
         const execReplaceWithResponse = async (frame, response, options) => {
-            let body, jsonSuccess = false;
-            try {
-                body = response instanceof Response
-                    ? await ResponsePlus.prototype.any.call(response, { to: 'json' })
-                    : (await response.readyStateChange('live')).body;
-                jsonSuccess = true;
-            } catch (e) {
-                body = await ResponsePlus.prototype.any.call(response);
+            let body, port, jsonSuccess = true;
+            if (response instanceof Response) {
+                try {
+                    body = await ResponsePlus.prototype.any.call(response, { to: 'json' });
+                } catch (e) {
+                    jsonSuccess = false;
+                    body = await ResponsePlus.prototype.any.call(response);
+                }
+                port = this.constructor.getPort(response, { handshake: 2 });
+            } else {
+                body = (await response.readyStateChange('live')).body;
+                port = response.port;
             }
             directReplaceWith(frame, {
                 body,
@@ -306,6 +316,7 @@ export class LiveResponse extends EventTarget {
                 headers: response.headers,
                 concurrent: response.concurrent, // for response === LiveResponse
                 ...options,
+                port,
                 type: response.type,
                 redirected: response.redirected,
                 url: response.url,
@@ -321,10 +332,7 @@ export class LiveResponse extends EventTarget {
                 return response;
             }
 
-            if (this.constructor.hasPort(response)) {
-                const port = this.constructor.getPort(response);
-                port.start();
-
+            if (port) {
                 // Bind to upstream mutations
                 if (jsonSuccess) {
                     port.projectMutations({
@@ -335,7 +343,7 @@ export class LiveResponse extends EventTarget {
                 }
 
                 // Bind to replacements
-                return new Promise((resolve) => {
+                const returnValue = new Promise((resolve) => {
                     const replaceHandler = (e) => {
                         const { body, ...options } = e.data;
                         wrapReplaceWith(null, body, { ...options });
@@ -347,6 +355,11 @@ export class LiveResponse extends EventTarget {
                     }, { once: true });
                     port.readyStateChange('close').then(resolve);
                 });
+
+                // Must come after having listened to events
+                port.start();
+
+                return returnValue;
             }
         };
 
@@ -461,7 +474,7 @@ export class LiveResponse extends EventTarget {
         });
 
         const responseMeta = _meta(this);
-        _wq(response).set('meta', responseMeta);
+        _wq(response).set('meta', new Map(responseMeta));
 
         if (!clientPort) return response;
 
@@ -486,6 +499,9 @@ export class LiveResponse extends EventTarget {
                 status: this.#status,
                 statusText: this.#statusText,
                 headers,
+                type: this.type,
+                url: this.url,
+                redirect: this.redirect,
                 concurrent: this.#concurrent,
             }, { type: 'response.replace', live: true/*gracefully ignored if not an object*/, signal: AbortSignal.any([this.#concurrencyAbortController.signal].concat(abortSignal || []))/* stop observing mutations on body a new body takes effect */ });
         };
