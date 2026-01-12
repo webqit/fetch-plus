@@ -34,12 +34,12 @@
   },
   "peerDependencies": {
     "@webqit/observer": "^3.8.19",
-    "@webqit/port-plus": "^0.1.18",
+    "@webqit/port-plus": "^0.1.19",
     "@webqit/url-plus": "^0.1.4"
   },
   "devDependencies": {
     "@webqit/observer": "^3.8.19",
-    "@webqit/port-plus": "^0.1.18",
+    "@webqit/port-plus": "^0.1.19",
     "@webqit/url-plus": "^0.1.4",
     "chai": "^4.3.4",
     "chai-as-promised": "^7.1.1",
