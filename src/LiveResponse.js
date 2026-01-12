@@ -38,12 +38,19 @@ export class LiveResponse extends EventTarget {
     }
 
     static hasPort(respone) {
+        if (respone instanceof LiveResponse && respone.#port) {
+            return true;
+        }
         const responseMeta = _meta(respone);
         return !!responseMeta.get('port')
             || !!respone.headers?.get?.(this.xHeaderName)?.trim();
     }
 
     static getPort(respone, { handshake = 1 } = {}) {
+        if (respone instanceof LiveResponse && respone.#port) {
+            return respone.#port;
+        }
+        
         if (!(respone instanceof Response
             || respone instanceof LiveResponse)) {
             return;
@@ -318,6 +325,9 @@ export class LiveResponse extends EventTarget {
         const execReplaceWithResponse = async (frame, response, options) => {
             let body, port, jsonSuccess = true;
             if (response instanceof Response) {
+                if (response.bodyUsed) {
+                    throw new Error('Response body already used');
+                }
                 try {
                     body = await ResponsePlus.prototype.any.call(response, { to: 'json' });
                 } catch (e) {

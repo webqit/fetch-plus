@@ -24,7 +24,7 @@ export function messageParserMixin(superClass) {
 
             // Process body
             let body = httpMessageInit.body;
-            let type = dataType(body);
+            let type = [null, undefined].includes(body) ? null : dataType(body);
 
             // Binary bodies
             if (['Blob', 'File'].includes(type)) {
@@ -56,7 +56,7 @@ export function messageParserMixin(superClass) {
                 headers['content-length'] = (new Blob([body])).size;
             }
 
-            if (!['FormData'].includes(type)
+            if (!['FormData', null].includes(type)
                 && !['function'].includes(typeof body)
                 && !headers['content-type']) {
                 headers['content-type'] = 'application/octet-stream';
