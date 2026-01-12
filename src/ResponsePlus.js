@@ -37,8 +37,7 @@ export class ResponsePlus extends messageParserMixin(Response) {
     }
 
     get status() {
-        // Support framework-injected app-level 'status'
-        return _meta(this).get('status') ?? super.status;
+        return this.headers.has('X-Redirect-Code') ? 200 : super.status;
     }
 
     clone() {
