@@ -35,7 +35,7 @@
   "peerDependencies": {
     "@webqit/observer": "^3.8.19",
     "@webqit/port-plus": "^0.1.19",
-    "@webqit/url-plus": "^0.1.7"
+    "@webqit/url-plus": "^0.1.8"
   },
   "devDependencies": {
     "@webqit/observer": "^3.8.19",
