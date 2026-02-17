@@ -115,12 +115,12 @@ export class HeadersPlus extends Headers {
                 const range = rangeStr.trim().split('-').map((s) => s ? parseInt(s, 10) : null);
                 range.resolveAgainst = (totalLength) => {
                     const offsets = [...range];
-                    if (offsets[1] === null) {
+                    if (typeof offsets[1] !== 'number') {
                         offsets[1] = totalLength - 1;
                     } else {
                         offsets[1] = Math.min(offsets[1], totalLength) - 1;
                     }
-                    if (offsets[0] === null) {
+                    if (typeof offsets[0] !== 'number') {
                         offsets[0] = offsets[1] ? totalLength - offsets[1] - 1 : 0;
                     }
                     return offsets;
