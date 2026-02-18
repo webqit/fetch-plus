@@ -111,34 +111,55 @@ export class HeadersPlus extends Headers {
 
         // Parse "Range" request header?
         if (/^Range$/i.test(name) && structured) {
+            const _after = (str, prefix) => str.includes(prefix) ? str.split(prefix)[1] : str;
+
             value = !value ? [] : _after(value, 'bytes=').split(',').map((rangeStr) => {
-                const range = rangeStr.trim().split('-').map((s) => s ? parseInt(s, 10) : null);
+                if (!rangeStr.includes('-')) rangeStr = '-'; // -> [null, null];
+
+                // "0-499" -> [0, 499] | "500-" -> [500, null] | "-500" -> [null, 500]
+                const range = rangeStr.trim().split('-').map((s) => (s.length > 0 ? parseInt(s, 10) : null));
+
                 range.resolveAgainst = (totalLength) => {
-                    const offsets = [...range];
-                    if (typeof offsets[1] !== 'number') {
+                    const offsets = [...range]; // Clone the [start, end] array
+
+                    // 1. Handle Suffix Ranges (e.g., bytes=-500)
+                    if (offsets[0] === null && offsets[1] !== null) {
+                        offsets[0] = Math.max(0, totalLength - offsets[1]);
                         offsets[1] = totalLength - 1;
-                    } else {
-                        offsets[1] = Math.min(offsets[1], totalLength) - 1;
                     }
-                    if (typeof offsets[0] !== 'number') {
-                        offsets[0] = offsets[1] ? totalLength - offsets[1] - 1 : 0;
+                    // 2. Handle Open-ended Ranges (e.g., bytes=500-)
+                    else if (offsets[0] !== null && offsets[1] === null) {
+                        offsets[1] = totalLength - 1;
                     }
-                    return offsets;
+                    // 3. Handle Normal Ranges (e.g., bytes=0-499)
+                    else if (offsets[0] !== null && offsets[1] !== null) {
+                        offsets[1] = Math.min(offsets[1], totalLength - 1);
+                    }
+
+                    return offsets; // Returns [start, end] where both are inclusive indices
                 };
+
                 range.canResolveAgainst = (currentStart, totalLength) => {
-                    const offsets = [
-                        typeof range[0] === 'number' ? range[0] : currentStart,
-                        typeof range[1] === 'number' ? range[1] : totalLength - 1
-                    ];
-                    // Start higher than end or vice versa?
-                    if (offsets[0] > offsets[1]) return false;
-                    // Stretching beyond valid start/end?
-                    if (offsets[0] < currentStart || offsets[1] >= totalLength) return false;
+                    const resolved = range.resolveAgainst(totalLength);
+
+                    // 1. Check for NaN or unparsed nulls (invalid formats)
+                    if (Number.isNaN(resolved[0]) || Number.isNaN(resolved[1]) || resolved[0] === null || resolved[1] === null) {
+                        return false;
+                    }
+
+                    // 2. Validate start (end is always clamped): 
+                    // - Range cannot be inverted (start > end)
+                    // - Start cannot be beyond file length
+                    // - Start cannot be below file start
+                    if (resolved[0] > resolved[1] || resolved[0] >= totalLength || resolved[0] < currentStart) {
+                        return false;
+                    }
+
                     return true;
                 };
-                range.toString = () => {
-                    return rangeStr;
-                };
+
+                range.toString = () => rangeStr;
+
                 return range;
             });
         }
