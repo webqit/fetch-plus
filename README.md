@@ -1686,10 +1686,10 @@ ranges[1].toString(); // '1000-1500'
 const resourceLength = 1200;
 
 ranges[0].canResolveAgainst(0/*start*/, resourceLength/*total*/); // true
-ranges[0].resolveAgainst(resourceLength); // [0, 499]
+ranges[0].resolveAgainst(resourceLength); // [0, 500] -> 501bytes
 
-ranges[1].canResolveAgainst(0/*start*/, resourceLength/*total*/); // false
-ranges[1].resolveAgainst(resourceLength); // [1000, 1199]
+ranges[1].canResolveAgainst(0/*start*/, resourceLength/*total*/); // true
+ranges[1].resolveAgainst(resourceLength); // [1000, 1199] -> 200 bytes
 ```
 
 ...with nulls:
@@ -1712,8 +1712,8 @@ const resourceLength = 1200;
 ranges[0].canResolveAgainst(0/*start*/, resourceLength/*total*/); // true
 ranges[0].resolveAgainst(resourceLength); // [0, 1199]
 
-ranges[1].canResolveAgainst(0/*start*/, resourceLength/*total*/); // false
-ranges[1].resolveAgainst(resourceLength); // [0, 1199]
+ranges[1].canResolveAgainst(0/*start*/, resourceLength/*total*/); // true
+ranges[1].resolveAgainst(resourceLength); // [0, 1199] -> clamped
 ```
 
 **The default**: Get as raw strings.

@@ -86,12 +86,12 @@ describe('Core API Tests', function () {
             // "range[0] < currentStart" is check.
             // If currentStart is 500, range 0-499 is NOT valid
 
-            expect(range.canResolveAgainst(0, 400)).to.be.false; // range end > total
+            expect(range.canResolveAgainst(0, 400)).to.be.true; // range end > total, but clamped
 
             // Render
-            // range is [0, 499]
+            // range is [0, 500] -> 501 bytes
             const rendered = range.resolveAgainst(1000);
-            expect(rendered).to.deep.equal([0, 499]);
+            expect(rendered).to.deep.equal([0, 500]);
         });
 
         it('should handle open-ended ranges', function () {
