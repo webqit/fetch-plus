@@ -24,6 +24,14 @@ export function messageParserMixin(superClass) {
 
             // Process body
             let body = httpMessageInit.body;
+
+            if (isAsyncIterable(body) || isGenerator(body)) {
+                body = asyncIterableToStream(body);
+                const type = 'ReadableStream';
+                headers['content-type'] ??= 'application/octet-stream';
+                return { body, headers: new Headers(headers), $type: type };
+            }
+
             let type = [null, undefined].includes(body) ? null : dataType(body);
 
             // Binary bodies
@@ -203,6 +211,8 @@ export function dataType(value) {
     return null;
 }
 
+// --------------
+
 export function isTypeReadable(obj) {
     return (
         obj !== null &&
@@ -216,4 +226,143 @@ export function isTypeReadable(obj) {
 export function isTypeStream(obj) {
     return obj instanceof ReadableStream
         || isTypeReadable(obj);
+}
+
+// --------------
+
+export const isGenerator = (obj) => {
+    return typeof obj?.next === 'function'
+        //&& typeof obj?.throw === 'function'
+        //&& typeof obj?.return === 'function';
+};
+
+export function isAsyncIterable(obj) {
+    return (
+        obj !== null &&
+        typeof obj === 'object' &&
+        typeof obj[Symbol.asyncIterator] === 'function'
+    );
+}
+
+export function asyncIterableToStream(iterable) {
+    if (!isAsyncIterable(iterable) && !isGenerator(body)) {
+        throw new TypeError('Body must be an async iterable.');
+    }
+
+    const iterator = isGenerator(iterable) ? iterable : iterable[Symbol.asyncIterator]();
+    const encoder = new TextEncoder();
+    let finished = false;
+
+    const closeIterator = async (reason) => {
+        if (finished) return;
+        finished = true;
+
+        if (typeof iterator.return === 'function') {
+            try {
+                await iterator.return(reason);
+            } catch { }
+        }
+    };
+
+    const encodeChunk = (value) => {
+        if (value == null) return null;
+
+        // Binary passthrough
+        if (value instanceof Uint8Array) {
+            return value;
+        }
+
+        // Text passthrough
+        if (typeof value === 'string') {
+            return encoder.encode(value);
+        }
+
+        // JSON (objects, arrays, numbers, booleans)
+        if (
+            typeof value === 'object' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean'
+        ) {
+            return encoder.encode(JSON.stringify(value) + '\n');
+        }
+
+        throw new TypeError(
+            `Unsupported chunk type in async iterable: ${typeof value}`
+        );
+    };
+
+    return new ReadableStream({
+        async pull(controller) {
+            try {
+                const { value, done } = await iterator.next();
+
+                if (done) {
+                    await closeIterator();
+                    controller.close();
+                    return;
+                }
+
+                const chunk = encodeChunk(value);
+                if (chunk) controller.enqueue(chunk);
+
+            } catch (err) {
+                await closeIterator();
+                controller.error(err);
+            }
+        },
+
+        async cancel(reason) {
+            await closeIterator(reason);
+        }
+    });
+}
+
+function streamToAsyncIterable(stream, { parse = null } = {}) {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+
+    let finished = false;
+    let buffer = '';
+
+    const close = async () => {
+        if (finished) return;
+        finished = true;
+        try {
+            await reader.cancel();
+        } catch { }
+        reader.releaseLock();
+    };
+
+    return {
+        async *[Symbol.asyncIterator]() {
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    if (parse === 'ndjson') {
+                        buffer += decoder.decode(value, { stream: true });
+
+                        let lines = buffer.split('\n');
+                        buffer = lines.pop(); // incomplete fragment
+
+                        for (const line of lines) {
+                            if (line.trim()) yield JSON.parse(line);
+                        }
+
+                        continue;
+                    }
+
+                    yield value;
+                }
+
+                if (parse === 'ndjson' && buffer.trim()) {
+                    yield JSON.parse(buffer);
+                }
+
+            } finally {
+                await close();
+            }
+        }
+    };
 }

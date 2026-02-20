@@ -1,7 +1,7 @@
 import { _isObject, _isTypeObject } from '@webqit/util/js/index.js';
 import { Observer, ListenerRegistry, Descriptor } from '@webqit/observer';
 import { BroadcastChannelPlus, WebSocketPort, MessagePortPlus } from '@webqit/port-plus';
-import { isTypeStream, _meta, _wq } from './messageParserMixin.js';
+import { isTypeStream, _meta, _wq, isAsyncIterable, isGenerator } from './messageParserMixin.js';
 import { ResponsePlus } from './ResponsePlus.js';
 
 export class LiveResponse extends EventTarget {
@@ -461,9 +461,12 @@ export class LiveResponse extends EventTarget {
                 throw new Error(`frameClosure is not supported for responses.`);
             }
             frame.donePromise = execReplaceWithResponse(frame, body, frameOptions);
-        } else if (isGenerator(body)) {
+        } else if (isAsyncIterable(body) || isGenerator(body)) {
             if (frameClosure) {
                 throw new Error(`frameClosure is not supported for generators.`);
+            }
+            if (!isGenerator(body)) {
+                body = body[Symbol.asyncIterator]();
             }
             frame.donePromise = execReplaceWithGenerator(frame, body, frameOptions);
         } else if (body instanceof LiveProgramHandleX) {
@@ -574,12 +577,6 @@ export class LiveResponse extends EventTarget {
         return clone;
     }
 }
-
-export const isGenerator = (obj) => {
-    return typeof obj?.next === 'function' &&
-        typeof obj?.throw === 'function' &&
-        typeof obj?.return === 'function';
-};
 
 export class ReplaceEvent extends Event {
 
