@@ -9,8 +9,6 @@
     "fetch",
     "LiveResponse"
   ],
-  "homepage": "https://fetch-plus.netlify.app/",
-  "icon": "https://webqit.io/icon.svg",
   "version": "0.1.33",
   "license": "MIT",
   "repository": {
@@ -30,17 +28,17 @@
     "version:next": "npm version prerelease --preid=next"
   },
   "dependencies": {
-    "@webqit/util": "^0.8.16"
+    "@webqit/util": "^0.8.19"
   },
   "peerDependencies": {
-    "@webqit/observer": "^3.8.19",
-    "@webqit/port-plus": "^0.1.23",
-    "@webqit/url-plus": "^0.1.8"
+    "@webqit/observer": "^3.8.22",
+    "@webqit/port-plus": "^0.1.24",
+    "@webqit/url-plus": "^0.1.9"
   },
   "devDependencies": {
-    "@webqit/observer": "^3.8.19",
-    "@webqit/port-plus": "^0.1.23",
-    "@webqit/url-plus": "^0.1.8",
+    "@webqit/observer": "^3.8.22",
+    "@webqit/port-plus": "^0.1.24",
+    "@webqit/url-plus": "^0.1.9",
     "chai": "^4.3.4",
     "chai-as-promised": "^7.1.1",
     "esbuild": "^0.20.2",
