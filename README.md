@@ -193,6 +193,22 @@ response.port.addEventListener('message', (event) => {
 });
 ```
 
+Note that `request.port` above is assumed to be injected by the application runtime. Its creation is shown soon in the Sample Express App area.
+
+> [!TIP]
+>
+> Note the distinction between `response.port` – as used above – and `request.port`.  
+> `response.port` is the client-side API  
+> `request.port` is the server-side API  
+> 
+> ```js
+>   (client) ────────────────────────────┐
+> response.port                          ▼
+>           ▲                        request.port
+>           └───────────────────────── (server)
+>                                
+> ```
+
 Concretely, this looks like this:
 
 **On the server:**
@@ -223,22 +239,6 @@ async function handle(request, signal, done) {
     return response;
 }
 ```
-
-Note that `request.port` above is assumed to be injected by the application runtime. Its creation is shown soon in the Sample Express App area.
-
-> [!TIP]
->
-> Note the distinction between `response.port` – as used above – and `request.port`.  
-> `response.port` is the client-side API  
-> `request.port` is the server-side API  
-> 
-> ```js
->   (client) ────────────────────────────┐
-> response.port                          ▼
->           ▲                        request.port
->           └───────────────────────── (server)
->                                
-> ```
 
 **On the client:**
 
