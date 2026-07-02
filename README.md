@@ -228,9 +228,9 @@ Note that `request.port` above is assumed to be injected by the application runt
 
 > [!TIP]
 >
-> Note the distinction between `request.port` – as used above – and `response.port`.
-> While `request.port` refers to a port instantiated by the application runtime per request (which the client is expected to connect to),
-> `response.port` is a port instantiated by `LiveResponse` per the response of that request. Think of it as:
+> Note the distinction between `response.port` – as used above – and `request.port`.
+> `response.port` is the client-side API  
+> `request.port` is the server-side API  
 > 
 > ```js
 >   (client) ────────────────────────────┐
