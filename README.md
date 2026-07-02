@@ -228,7 +228,7 @@ Note that `request.port` above is assumed to be injected by the application runt
 
 > [!TIP]
 >
-> Note the distinction between `response.port` – as used above – and `request.port`.
+> Note the distinction between `response.port` – as used above – and `request.port`.  
 > `response.port` is the client-side API  
 > `request.port` is the server-side API  
 > 
