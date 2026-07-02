@@ -19,7 +19,7 @@ describe('LiveResponse Integration Tests (Background Ports)', function () {
 
             // 2. Transport layer response
             const response = new Response('initial content', {
-                headers: { 'X-Message-Port': `channel://${portID}` }
+                headers: { 'X-Live-Session': `channel://${portID}` }
             });
 
             // ------------
@@ -220,7 +220,7 @@ describe('LiveResponse Integration Tests (Background Ports)', function () {
 
             // 3. Transport layer Response
             const response = liveResponseA.toResponse({ port: serverSideClientPort, signal: undefined });
-            response.headers.set('X-Message-Port', 'channel://' + portID);
+            response.headers.set('X-Live-Session', 'channel://' + portID);
 
             // ------------
 

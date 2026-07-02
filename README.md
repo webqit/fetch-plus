@@ -75,7 +75,13 @@ const state = (await response.now()).body;
 console.log(state); // { count: 0 }
 ```
 
-What makes this "live response" is the live relationship and interactivity between the client-side instance and the server-side instance.
+> [!TIP]
+> The above can be expressed more directly as `fetch(url, { live: true })`:
+> ```js
+> const response = await fetchPlus('http://localhost/counter', { live: true, ...fetchOptions });
+> ```
+
+What makes this "live response" is the live relationship between the client-side instance and the server-side instance.
 
 LiveResponse works in real-time in three ways:
 
@@ -113,7 +119,7 @@ return response;
 **On the client:**
 
 ```js
-const response = new LiveResponse(await fetch('http://localhost/counter'));
+const response = await fetchPlus('http://localhost/counter', { live: true });
 const state = (await response.now()).body;
 
 Observer.observe(state, () => {
@@ -157,7 +163,7 @@ return response;
 **On the client:**
 
 ```js
-const response = new LiveResponse(await fetch('http://localhost/hello'));
+const response = await fetchPlus('http://localhost/hello', { live: true });
 console.log((await response.now()).body); // { pageTitle: 'Hello World' }
 
 response.addEventListener('replace', () => {
@@ -229,13 +235,17 @@ Note that `request.port` above is assumed to be injected by the application runt
 > `response.port` is a port instantiated by `LiveResponse` per the response of that request. Think of it as:
 > 
 > ```js
-> (client) response.port ◀────▶ request.port (server)
+>   (client) ────────────────────────────┐
+> response.port                          ▼
+>           ▲                        request.port
+>           └───────────────────────── (server)
+>                                
 > ```
 
 **On the client:**
 
 ```js
-const response = new LiveResponse(await fetch('http://localhost/hello'));
+const response = await fetchPlus('http://localhost/hello', { live: true });
 const { port } = await response.now();
 
 port.postMessage('Hello from client');
@@ -251,7 +261,7 @@ port.addEventListener('message', (event) => {
 1. Creating the server-side port and exposing it – e.g. as `request.port`
 2. Managing request + port lifecycles via an abort signal
 3. Converting `LiveResponse` to a standard response
-4. Adding the `X-Message-Port` header to the outgoing response
+4. Adding the `X-Live-Session` header to the outgoing response
 
 Depending on your use case:
 
@@ -346,7 +356,7 @@ async function interactiveRoute(req, res, handle) {
     
     // Add the realtime port header – tells the client where to connect to.
     // On the client-side, LiveResponse detects the header and connects to the web socket URL.
-    outgoingRes.headers.set('X-Message-Port', `socket:///?port_id=${portId}`);
+    outgoingRes.headers.set('X-Live-Session', `socket:///?port_id=${portId}`);
     // MADE OF TWO PARTS:
     // 1. The port scheme "socket://" (as defined by LiveResponse)
     // 2. The connection URI "/?port_id=portId" (as defined by the server). You almost always want this part to begin with a slash.
@@ -393,7 +403,7 @@ LiveResponse can therefore be used between:
 The idea here is to create a port instance on the server for the given request
 and "invite" the issuing client to connect to it. To achieve this, the port instance is
 assigned a unique identifier. That identifier is sent in the invite.
-This is done via the `X-Message-Port` header.
+This is done via the `X-Live-Session` header.
 
 ```js
 import { StarPort, WebSocketPort } from '@webqit/port-plus';
@@ -411,27 +421,28 @@ portRegistry.set(portId, req.port);
 > Messages sent ahead of that implicitly wait. The first connecting client sees them.
 
 ```js
-// When the client connects...
+// Convert the LiveResponse to a standard Response
+const outgoingRes = response.toResponse({ port: req.port, signal: abortController.signal });
+
+// Attach the X-Live-Session header and send
+outgoingRes.headers.set('X-Live-Session', `socket:///?port_id=${portId}`);
+send(outgoingRes);
+```
+
+When the client connects:
+
+```js
+// Wrap the node.js ws stream with WebSocketPort...
 const wsPort = new WebSocketPort(ws);
 // use the port ID from the request URL
 // to identify the original port it belongs. Add it
 portRegistry.get(portId).addPort(wsPort);
 ```
 
-```js
-// Convert the LiveResponse to a standard Response
-const outgoingRes = response.toResponse({ port: req.port, signal: abortController.signal });
-
-// Attach the X-Message-Port header and send
-outgoingRes.headers.set('X-Message-Port', `socket:///?port_id=${portId}`);
-send(outgoingRes);
-```
-
 On the client, LiveResponse detects the presence of this header, and the port scheme, and connects via WebSocket.
 
 ```js
-const serverResponse = await fetch('http://localhost/hello');
-const response = new LiveResponse(serverResponse);
+const response = await fetchPlus('http://localhost/hello', { live: true });
 ```
 
 The resulting `response.port` interface on the client is `WebSocketPort`. It is the same interface as the rest, just backed by WebSocket.
@@ -457,16 +468,15 @@ const req.port = new BroadcastChannelPlus(portId, {
 // Convert the LiveResponse to a standard Response
 const outgoingRes = response.toResponse({ port: req.port, signal: abortController.signal });
 
-// Attach the X-Message-Port header and send
-outgoingRes.headers.set('X-Message-Port', `channel://${portId}`);
+// Attach the X-Live-Session header and send
+outgoingRes.headers.set('X-Live-Session', `channel://${portId}`);
 send(outgoingRes);
 ```
 
 On the client, LiveResponse detects the presence of this header, and the port scheme, and connects via Broadcast Channel.
 
 ```js
-const swResponse = await fetch('http://localhost/hello');
-const response = new LiveResponse(swResponse);
+const response = await fetchPlus('http://localhost/hello', { live: true });
 ```
 
 The resulting `response.port` interface on the client is `BroadcastChannelPlus`. It is the same interface as the rest, but based on the `BroadcastChannel` API.
@@ -500,9 +510,9 @@ async function handle(req) {
 
 Both `port1` and `port2` in this scenario are `MessagePortPlus` interfaces. They are, again, the same interface as the rest, but based on the `MessageChannel` API.
 
-##### The `X-Message-Port` Header
+##### The `X-Live-Session` Header
 
-The `X-Message-Port` header has a specific format that is made of two parts:
+The `X-Live-Session` header has a specific format that is made of two parts:
 
 1. The port scheme – as defined by LiveResponse. This is strictly either `"socket://"` (for WebSocket-backed ports),  or `"channel://"` (for BroadcastChannel-backed ports).
 2. The connection URI or channel name – as defined by the application. This must be unique to the request being processed. This may look like `/?port_id=<portId>` (for a WebSocket connection URI; and you almost always want this part to begin with a slash), or `<channelName>` (for a BroadcastChannel).
@@ -534,7 +544,7 @@ return response;
 **On the client:**
 
 ```js
-const response = new LiveResponse(await fetch('http://localhost/counter'));
+const response = await fetchPlus('http://localhost/counter', { live: true });
 const state = (await response.now()).body;
 
 Observer.observe(state, () => {
@@ -719,7 +729,7 @@ When passed a standard Response object, LiveResponse does a direct instance mapp
 > + If that fails, try to decode the data to the most appropriate result type for the given content type; e.g. "text" for `Content-Type: text/*`; `Blob` for `Content-Type: image/*`; etc. (LiveResponse internally uses `ResponsePlus.prototype.any.call(response)` for this. This API is covered [below](#the-any-instance-method).)
 > + Map the result to the `body` attribute.
 
-On success, LiveResponse inspects the response headers for the presence of the `X-Message-Port` header. If present, LiveResponse
+On success, LiveResponse inspects the response headers for the presence of the `X-Live-Session` header. If present, LiveResponse
 automatically connects to the port specified by the header and begins a real time mirroring of the original response. The completion of this cycle is covered in the [Response-Frame Cycle](#2-the-response-frame-cycle) section.
 
 When passed a LiveResponse instance itself, LiveResponse does a direct instance mapping of the given response. Next, LiveResponse automatically binds to the instance's change events and begins a real time mirroring of the response. The completion of this cycle is also covered in the [Response-Frame Cycle](#2-the-response-frame-cycle) section.
@@ -1080,10 +1090,10 @@ const replaceStatus8 = await response.replaceWith('frame 8');
 console.log(replaceStatus8); // true
 ```
 
-`replaceStatus9` below, resolves when the series of responses from upstream – over the specified `X-Message-Port` – is complete, or when the port closes:
+`replaceStatus9` below, resolves when the series of responses from upstream – over the specified `X-Live-Session` – is complete, or when the port closes:
 
 ```js
-const upstreamResponse = new Response('frame 9', { headers: { 'X-Message-Port': 'socket:///?port_id=fedkdkjd43' }});
+const upstreamResponse = new Response('frame 9', { headers: { 'X-Live-Session': 'socket:///?port_id=fedkdkjd43' }});
 const replaceStatus9 = await response.replaceWith(
     upstreamResponse,
     { done: false } // Keep the instance open even after cycle completes
@@ -1171,7 +1181,7 @@ return response;
 With `concurrent: true`, the counter above will continue unstopped on the client side even when the response is replaced:
 
 ```js
-const response = LiveResponse.from(fetch('http://localhost/counter'));
+const response = new LiveResponse(await fetch('http://localhost/counter'));
 const initialState = (await response.now()).body;
 
 Observer.observe(initialState, 'count', () => {
@@ -1317,7 +1327,7 @@ const jsonObject = await response.any({ to: 'json' });
 const formData = await response.any({ to: 'formData' });
 ```
 
-`fetchPlus()` is also provided as a direct entry point to `ResponsePlus`. (`fetchPlus()` returns an instance of `ResponsePlus`.)
+`fetchPlus()` is also provided as a direct entry point to `ResponsePlus` and `LiveResponse`. By default, `fetchPlus()` returns an instance of `ResponsePlus`. When `options.live === true`, it returns a `LiveResponse`.
 
 ```js
 // Using fetchPlus() for auto-upgraded response instances
@@ -1328,6 +1338,10 @@ const response = await fetchPlus(url); // Auto-upgraded response instance
 const jsonObject = await response.any();
 const jsonObject = await response.any({ to: 'json' });
 const formData = await response.any({ to: 'formData' });
+```
+
+```js
+const liveRes = await fetchPlus(url, { live: true });
 ```
 
 **Example 5: _Upgrade Paths for Existing Request/Response Instances_**

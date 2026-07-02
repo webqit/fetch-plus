@@ -18,7 +18,7 @@ export class LiveResponse extends EventTarget {
     }
 
     static get xHeaderName() {
-        return 'X-Message-Port';
+        return 'X-Live-Session';
     }
 
     static test(unknown) {
