@@ -76,14 +76,12 @@ console.log(state); // { count: 0 }
 ```
 
 > [!TIP]
-> The above can be expressed more directly as `fetch(url, { live: true })`:
+> LiveResponse can be obtained more directly via `fetch(url, { live: true })`:
 > ```js
 > const response = await fetchPlus('http://localhost/counter', { live: true, ...fetchOptions });
 > ```
 
-What makes this "live response" is the live relationship between the client-side instance and the server-side instance.
-
-LiveResponse works in real-time in three ways:
+What makes this "live response" is the live relationship between the client-side instance and the server-side instance. This works in three ways:
 
 1. Supports live state projection via mutable response bodies.
 2. Offers a multi-response architecture via response swaps.
